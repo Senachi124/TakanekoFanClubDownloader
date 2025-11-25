@@ -25,6 +25,7 @@
     "directories": {
       "output": "dist"
     },
+    "publish": null,
     "mac": {
       "category": "public.app-category.utilities",
       "target": [
