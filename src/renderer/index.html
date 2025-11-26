@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>たかねこダウンローダー</title>
+
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self' 'unsafe-inline'; img-src 'self' data: file: https:; connect-src 'self' https://api.takanekofc.com https://takanekofc.com;"
+  />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <h1>たかねこダウンローダー</h1>
+      <div class="token-status" id="tokenStatus">
+        <span class="status-dot offline"></span>
+        <span>ログインしていません</span>
+      </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="main-nav">
+      <button class="nav-btn active" data-view="home">
+        <span class="icon">&#127968;</span>
+        ホーム
+      </button>
+      <button class="nav-btn" data-view="gallery">
+        <span class="icon">&#128247;</span>
+        ギャラリー
+      </button>
+    </nav>
+
+    <!-- Home View -->
+    <main class="view active" id="homeView">
+      <div class="button-grid">
+
+        <!-- Token -->
+        <div class="action-card" id="getTokenCard">
+          <div class="card-icon">&#128273;</div>
+          <h3>ステップ 1：ログイン</h3>
+          <p>まずはFCアカウントでログインしましょう♪</p>
+          <button class="action-btn primary" id="getTokenBtn">ログインする</button>
+        </div>
+
+        <!-- Export -->
+        <div class="action-card" id="exportCard">
+          <div class="card-icon">📥</div>
+          <h3>ステップ 2：ダウンロード</h3>
+          <p>投稿や写真をまとめて保存できます✨</p>
+
+          <button class="action-btn success" id="startExportBtn">ダウンロード開始</button>
+
+          <div class="control-btns" style="display: flex; gap: 10px; justify-content: center;">
+            <button class="action-btn" id="pauseBtn" style="display: none; background: #fdcb6e; color: #333;">一時停止</button>
+            <button class="action-btn" id="cancelBtn" style="display: none; background: #d63031;">停止</button>
+          </div>
+        </div>
+
+        <!-- Folder -->
+        <div class="action-card">
+          <div class="card-icon">&#128193;</div>
+          <h3>保存フォルダ</h3>
+          <p>ダウンロードしたコンテンツを確認できます♪</p>
+          <button class="action-btn" id="openFolderBtn">フォルダを開く</button>
+        </div>
+      </div>
+
+      <!-- Progress -->
+      <div class="progress-section" id="progressSection" style="display: none;">
+        <h3>進行状況</h3>
+
+        <div class="progress-item">
+          <span>1. 投稿リストを取得中…</span>
+          <div class="progress-bar">
+            <div class="progress-fill" id="progress1" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <div class="progress-item">
+          <span>2. 詳細データを取得中…</span>
+          <div class="progress-bar">
+            <div class="progress-fill" id="progress2" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <div class="progress-item">
+          <span>3. ファイルを保存中…</span>
+          <div class="progress-bar">
+            <div class="progress-fill" id="progress3" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <div class="progress-message" id="progressMessage">準備完了♪</div>
+      </div>
+    </main>
+
+    <!-- Gallery View -->
+    <main class="view" id="galleryView">
+      <div class="gallery-container">
+        
+        <div class="member-tabs" id="memberTabs">
+          <p class="loading-text">ギャラリーを読み込んでいます…</p>
+        </div>
+
+        <div class="sub-nav" id="subNav" style="display: none;">
+          <button class="sub-nav-btn active" id="btnShowPhotos">📸 写真一覧</button>
+          <button class="sub-nav-btn" id="btnShowPosts">📝 投稿一覧</button>
+        </div>
+
+        <div class="gallery-scroll-area" id="galleryScrollArea">
+          <div id="imageWall" class="image-wall"></div>
+          <div id="postList" class="post-list" style="display: none;"></div>
+
+          <p class="empty-text" id="galleryEmptyText">メンバーを選んでください♪</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- Post Viewer -->
+    <div class="post-viewer-modal" id="postViewer">
+      <div class="viewer-header">
+        <h3 id="viewerTitle">投稿タイトル</h3>
+        <button class="action-btn" id="closeViewerBtn">閉じる</button>
+      </div>
+      <div class="viewer-content" id="viewerContent"></div>
+    </div>
+
+    <!-- Login Modal -->
+    <div class="modal" id="loginModal">
+      <div class="modal-content">
+        <h2>ログインのご案内</h2>
+        <ol class="instructions">
+          <li>FCログインページがブラウザで開きます</li>
+          <li>アカウント情報を入力してログインしてください</li>
+          <li>ログイン後に「トークン取得」を押すと認証できます</li>
+          <li>取得が完了するとブラウザは自動的に閉じます</li>
+        </ol>
+        <div class="modal-buttons">
+          <button class="action-btn" id="cancelLoginBtn">キャンセル</button>
+          <button class="action-btn primary" id="proceedLoginBtn">ログインページを開く</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Capture Modal -->
+    <div class="modal" id="captureModal">
+      <div class="modal-content">
+        <h2>トークン取得</h2>
+        <p><strong>ステップ 1：</strong> 開いたブラウザでログインしてください</p>
+        <p><strong>ステップ 2：</strong> ログイン後に下の「トークン取得」をクリック</p>
+        <p style="color: #00b894; font-size: 0.9rem; margin-top: 15px;">
+          ✓ 自動的に認証トークンを読み取ります♪
+        </p>
+        <p style="color: #aaa; font-size: 0.85rem;">処理が終わるまでブラウザは閉じないでください。</p>
+        <div class="modal-buttons">
+          <button class="action-btn" id="cancelCaptureBtn">キャンセル</button>
+          <button class="action-btn success" id="captureTokenBtn">トークン取得</button>
+        </div>
+        <div class="capture-status" id="captureStatus"></div>
+      </div>
+    </div>
+
+    <!-- Image Modal -->
+    <div class="modal" id="imageModal">
+      <div class="image-viewer">
+        <button class="close-btn" id="closeImageBtn">&times;</button>
+        <img id="modalImage" src="" alt="画像表示" />
+      </div>
+    </div>
+
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

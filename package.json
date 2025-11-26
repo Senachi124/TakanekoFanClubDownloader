@@ -1,0 +1,57 @@
+{
+  "name": "takaneko-downloader",
+  "version": "1.0.0",
+  "description": "Takaneko Fanclub Content Downloader",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win"
+  },
+  "author": "Takaneko Fan",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {
+    "cheerio": "1.0.0-rc.12",
+    "electron-store": "^8.1.0"
+  },
+  "build": {
+    "appId": "com.takaneko.downloader",
+    "productName": "Takaneko Downloader",
+    "directories": {
+      "output": "dist"
+    },
+    "publish": null,
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
