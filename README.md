@@ -1,99 +1,91 @@
 # Takaneko Fanclub Downloader
 
-Takaneko Fanclub 內容下載器（Electron 桌面應用程式）
+Takaneko Fanclub 內容下載器。下載 Takaneko Fanclub 的投稿、圖片與 Markdown，並在桌面應用程式中瀏覽。
 
-Takaneko Fanclub の投稿を取得して、Markdown と画像として保存する Electron デスクトップアプリです。
+Takaneko Fanclub の投稿・画像・Markdown を保存し、デスクトップアプリで閲覧するためのダウンローダーです。
 
 > 僅供已取得 Takaneko Fanclub 合法存取權限的使用者使用。請遵守網站條款、著作權與內容使用規範。
 >
-> Takaneko Fanclub への正規のアクセス権を持つユーザーのみ利用してください。サイト規約、著作権およびコンテンツ利用規約を遵守してください。
+> 正規のアクセス権を持つユーザーのみ利用し、サイト規約・著作権・コンテンツ利用規約を遵守してください。
 
-## 功能／機能
+## 下載／ダウンロード
 
-- 透過內建登入視窗登入 Takaneko Fanclub，並自動擷取 API 使用的 Bearer token。
-  - 内蔵ログインウィンドウで Takaneko Fanclub にログインし、API 通信用の Bearer token を自動取得します。
-- 依序執行三個下載階段：取得文章清單、取得文章詳細內容、儲存 Markdown 與圖片。
-  - 3 段階（投稿一覧取得、投稿詳細取得、Markdown／画像保存）でダウンロードします。
-- 詳細內容與檔案輸出採批次處理，預設最多同時處理 5 筆。
-  - 詳細取得とファイル保存はバッチ処理で行い、既定では最大 5 件を並列処理します。
-- 先掃描本機 `.post-id` 索引並跳過已匯出的文章；索引掃描使用 AIMD 動態調整併發，避免文章數量大時固定 5 筆檢查過慢。
-  - 先にローカルの `.post-id` 索引を走査して既存投稿をスキップします。索引走査は AIMD で並列数を動的に調整し、大量投稿でも固定 5 件ずつの確認を避けます。
-- 下載中可暫停、繼續或取消，並顯示各階段進度。
-  - ダウンロード中は一時停止、再開、キャンセルが可能で、各段階の進捗を表示します。
-- GUI 可設定真正需要抓取／儲存的文章並發數，範圍為 1–32，預設為 5。
-  - GUI から実際に取得・保存する投稿の並列数を 1–32 の範囲で設定できます。既定値は 5 です。
-- Gallery 可按成員瀏覽所有圖片，或開啟文章列表閱讀匯出的 Markdown。
-  - Gallery ではメンバー別に画像一覧を表示し、投稿一覧から保存済み Markdown を閲覧できます。
+一般使用者不需要安裝 Node.js。請到 [Releases](https://github.com/Senachi124/TakanekoFanClubDownloader/releases) 下載對應作業系統的安裝檔。
 
-## 執行環境／動作環境
+通常の利用では Node.js のインストールは不要です。[Releases](https://github.com/Senachi124/TakanekoFanClubDownloader/releases) から OS に合うファイルをダウンロードしてください。
 
-- Node.js 與 npm
-  - Node.js と npm
-- 可連線至以下網站：
-  - `https://takanekofc.com`
-  - `https://api.takanekofc.com`
-- 建議使用支援 Electron 28 的 64 位元桌面環境。
-  - Electron 28 に対応した 64 ビットのデスクトップ環境を推奨します。
+- Windows：下載 `.exe`；`Setup` 版本會安裝到系統，另一個 `.exe` 可直接執行。
+  - Windows：`.exe` をダウンロードします。`Setup` 版はインストール用、もう一方の `.exe` は直接実行できます。
+- macOS：下載 `.dmg` 後拖曳到 Applications；`.zip` 可解壓縮後使用。
+  - macOS：`.dmg` を開いて Applications にコピーします。`.zip` は解凍して使用できます。
 
-## 安裝與啟動／インストールと起動
+## 快速使用／クイックスタート
 
-在專案根目錄執行：
-
-プロジェクトのルートディレクトリで実行してください：
-
-```bash
-npm install
-npm start
-```
-
-## 使用方式／使い方
-
-1. 按下 Login／ログイン，開啟 Takaneko Fanclub 登入頁面。
-2. 在登入視窗完成登入後，按下 Token Capture／トークン取得。
-3. 確認狀態顯示已登入，再按下 Start Download／ダウンロード開始。
-4. 在下載卡片設定「下載並發數／ダウンロード並列数」（預設 5）。已匯出的文章會先被跳過，只有新文章使用此數值處理。
-   - ダウンロードカードで「ダウンロード並列数」を設定します（既定値 5）。既存投稿は先にスキップされ、新規投稿だけがこの値で処理されます。
-5. 等待三個階段完成；若需要，可按 Pause／一時停止、Resume／再開或 Cancel／停止。
-6. 按 Open Folder／フォルダを開く查看匯出資料，或切換到 Gallery／ギャラリー瀏覽內容。
-
-### 登入與 token／ログインと token
-
-應用程式會在登入視窗的 API request header 中尋找 `Authorization`，成功擷取後以 `Bearer ...` 格式保存。token 由 `electron-store` 儲存於 Electron 的使用者資料目錄，不會寫入專案資料夾。
-
-ログインウィンドウから送信される API リクエストの `Authorization` ヘッダーを検出し、成功すると `Bearer ...` 形式で保存します。token は `electron-store` により Electron のユーザーデータディレクトリへ保存され、プロジェクトフォルダには保存されません。
+1. 開啟程式，按 Login／ログイン。
+   - アプリを起動し、Login／ログインを押します。
+2. 在內建視窗登入 Takaneko Fanclub，按 Token Capture／トークン取得。
+   - 内蔵ウィンドウで Takaneko Fanclub にログインし、Token Capture／トークン取得を押します。
+3. 在下載卡片設定下載並發數，預設為 5，可設定 1–32。
+   - ダウンロードカードで並列数を設定します。既定値は 5、設定範囲は 1–32 です。
+4. 按 Start Download／ダウンロード開始。
+   - Start Download／ダウンロード開始を押します。
+5. 等待下載完成；需要時可使用 Pause／一時停止、Resume／再開或 Cancel／停止。
+   - 完了まで待ちます。必要に応じて Pause／一時停止、Resume／再開、Cancel／停止を使えます。
+6. 按 Open Folder／フォルダを開く查看檔案，或切換到 Gallery／ギャラリー瀏覽圖片與文章。
+   - Open Folder／フォルダを開くで保存先を開くか、Gallery／ギャラリーで画像と投稿を閲覧します。
 
 ## 下載流程圖／ダウンロードフローチャート
 
+1. 登入並取得 API token。
+   - ログインして API token を取得します。
+2. 取得所有通知與投稿清單。
+   - 通知と投稿一覧を取得します。
+3. 讀取本機 `.post-id` 索引，跳過已經匯出的投稿。
+   - ローカルの `.post-id` 索引を読み、保存済み投稿をスキップします。
+4. 只抓取新投稿的詳細內容。
+   - 新規投稿の詳細だけを取得します。
+5. 下載圖片並寫入 `index.md`。
+   - 画像を保存し、`index.md` を作成します。
+6. 在 Gallery 顯示已匯出的內容。
+   - Gallery に保存済みコンテンツを表示します。
+
 ```mermaid
 flowchart TD
-    A[啟動應用程式<br/>アプリ起動] --> B{已有 token？<br/>token あり？}
-    B -- 否／いいえ --> C[開啟登入頁面<br/>ログインページを開く]
-    C --> D[完成登入並擷取 Authorization<br/>ログインして Authorization を取得]
-    D --> E[保存 Bearer token<br/>Bearer token を保存]
-    B -- 是／はい --> F[按下開始下載<br/>ダウンロード開始]
-    E --> F
-    F --> G[階段 1：取得通知數量與文章清單<br/>Step 1：通知数と投稿一覧を取得]
-    G --> H{取得成功？<br/>取得成功？}
-    H -- 否／いいえ --> X[顯示錯誤並結束<br/>エラー表示して終了]
-    H -- 是／はい --> I[建立本機 .post-id 索引並以 AIMD 檢查已存在文章<br/>ローカル索引を作成して AIMD で既存投稿を確認]
-    I --> J{需要下載？<br/>ダウンロードが必要？}
-    J -- 否／いいえ --> O[完成；可開啟資料夾或 Gallery<br/>完了；フォルダまたは Gallery を開く]
-    J -- 是／はい --> K[階段 2：只處理新文章；並發數由 GUI 設定<br/>Step 2：新規投稿のみ GUI 設定数で取得]
-    K --> L{暫停或取消？<br/>一時停止／キャンセル？}
-    L -- 暫停／一時停止 --> M[等待繼續<br/>再開を待つ]
-    M --> K
-    L -- 取消／キャンセル --> X
-    L -- 繼續／続行 --> N[階段 3：建立資料夾、下載圖片、寫入 index.md<br/>Step 3：フォルダ作成、画像保存、index.md 書き込み]
-    N --> P{匯出成功？<br/>保存成功？}
-    P -- 否／いいえ --> X
-    P -- 是／はい --> O
+    A[啟動程式<br/>アプリ起動] --> B{已有 token？<br/>token あり？}
+    B -- 否／いいえ --> C[登入並擷取 token<br/>ログインして token を取得]
+    B -- 是／はい --> D[取得投稿清單<br/>投稿一覧を取得]
+    C --> D
+    D --> E[讀取本機 .post-id 索引<br/>ローカル索引を読み込む]
+    E --> F{已匯出？<br/>保存済み？}
+    F -- 是／はい --> G[跳過<br/>スキップ]
+    F -- 否／いいえ --> H[取得詳細內容<br/>詳細を取得]
+    H --> I[下載圖片並儲存 Markdown<br/>画像と Markdown を保存]
+    G --> J{還有投稿？<br/>残りあり？}
+    I --> J
+    J -- 是／はい --> F
+    J -- 否／いいえ --> K[完成；開啟 Folder 或 Gallery<br/>完了；Folder または Gallery を開く]
 ```
 
-## 匯出結構／出力構成
+## AIMD 快速檢查／AIMD による高速確認
 
-匯出根目錄是 Electron 的 `userData/exported`。實際位置依作業系統而不同，可使用應用程式內的 Open Folder／フォルダを開く開啟。
+AIMD 主要用來快速判斷「這篇投稿是否已經下載過」，不是用來下載內容，也不會取代必要的 API 請求。
 
-出力先は Electron の `userData/exported` です。実際のパスは OS により異なるため、アプリ内の Open Folder／フォルダを開くから開いてください。
+AIMD は「その投稿が保存済みか」を高速に判定するための仕組みです。コンテンツをダウンロードする処理ではなく、必要な API リクエストを置き換えるものでもありません。
+
+- 程式先掃描匯出資料夾內的 `.post-id` 檔案，建立已存在投稿的索引。
+  - まず出力フォルダ内の `.post-id` を読み、保存済み投稿の索引を作ります。
+- 檢查從目前並發數開始；成功時逐步增加，遇到檔案 I/O 錯誤時降低並發數，最多 32 個。
+  - 現在の並列数から開始し、成功時は少しずつ増加、ファイル I/O エラー時は減少させます（最大 32 件）。
+- 已存在的投稿會直接跳過詳細查詢與檔案輸出；只有新投稿使用 GUI 設定的並發數（預設 5）。
+  - 保存済み投稿は詳細取得と出力をスキップし、新規投稿だけが GUI 設定値（既定値 5）で処理されます。
+- 舊版本沒有 `.post-id` 的資料會在第一次更新時重新處理一次，之後就能正常跳過。
+  - 旧バージョンで `.post-id` がない投稿は、初回更新時に一度だけ再処理され、以降はスキップできます。
+
+## 匯出內容／出力内容
+
+匯出根目錄是 Electron 的 `userData/exported`，實際位置依作業系統而不同。可使用 Open Folder／フォルダを開く開啟。
+
+出力先は Electron の `userData/exported` です。実際の場所は OS により異なります。Open Folder／フォルダを開くから開けます。
 
 ```text
 <userData>/exported/
@@ -109,67 +101,12 @@ flowchart TD
 └─ ...
 ```
 
-`index.md` 會包含文章標題、發送者、日期、內文與本機圖片連結。文章資料夾名稱中的日期格式為 `YYYY-MM-DD_HHMMSS`，圖片會同時保存於文章資料夾與成員的 `pictures/` 資料夾，方便 Gallery 使用。
+`index.md` 包含標題、發送者、日期、文章內容與本機圖片連結。`.post-id` 是程式自動產生的索引檔，請勿手動修改或刪除。
 
-`index.md` にはタイトル、送信者、日付、本文、ローカル画像へのリンクが含まれます。投稿フォルダ名の日付形式は `YYYY-MM-DD_HHMMSS` です。画像は投稿フォルダとメンバーの `pictures/` の両方に保存され、Gallery から参照できます。
+`index.md` にはタイトル、送信者、日付、本文、ローカル画像へのリンクが含まれます。`.post-id` は自動生成される索引ファイルのため、手動で変更・削除しないでください。
 
-`.post-id` 是由程式自動產生的隱藏索引檔，用來在下次執行時快速判斷文章是否已匯出，請勿手動修改或刪除。
+## 登入與資料安全／ログインとデータ安全
 
-`.post-id` は次回実行時に投稿の保存済み状態を高速判定するために自動生成される隠し索引ファイルです。手動で変更・削除しないでください。
+登入 token 會由 `electron-store` 保存於 Electron 的使用者資料目錄，不會寫入專案資料夾。請勿將 token 分享給他人。
 
-## GitHub Actions 發布／GitHub Actions によるリリース
-
-推送版本 tag（建議格式 `v1.0.0`）後，`.github/workflows/build.yml` 會自動執行：
-
-タグ（推奨形式 `v1.0.0`）を push すると、`.github/workflows/build.yml` が自動的に次を実行します：
-
-1. 在 macOS runner 建置 DMG 與 ZIP。
-   - macOS runner で DMG と ZIP をビルドします。
-2. 在 Windows runner 建置 x64 NSIS 安裝程式與 portable EXE。
-   - Windows runner で x64 NSIS インストーラーと portable EXE をビルドします。
-3. 建置完成後，自動建立或更新 GitHub Release，並附加全部產物。
-   - 完了後、GitHub Release を自動作成または更新し、全成果物を添付します。
-
-```bash
-git add .
-git commit -m "Prepare release"
-git tag v1.0.0
-git push origin main --tags
-```
-
-GitHub Actions 需要 repository 的 `contents: write` 權限；workflow 使用 GitHub 內建的 `GITHUB_TOKEN`，不需要額外建立 PAT。
-
-GitHub Actions にはリポジトリの `contents: write` 権限が必要です。workflow は GitHub 標準の `GITHUB_TOKEN` を使用するため、追加の PAT は不要です。
-
-## 打包／パッケージング
-
-```bash
-# macOS
-npm run build:mac
-
-# Windows x64
-npm run build:win
-
-# 依照 electron-builder 的預設平台設定建置
-# electron-builder の既定プラットフォーム設定でビルド
-npm run build
-```
-
-建置輸出到 `dist/`（已列入 `.gitignore`）。macOS 會產生 DMG／ZIP；Windows x64 會產生 NSIS 安裝程式與 portable 版本。
-
-ビルド成果物は `dist/` に出力されます（`.gitignore` 対象）。macOS は DMG／ZIP、Windows x64 は NSIS インストーラーと portable 版を生成します。
-
-## 開發注意事項／開発上の注意
-
-- API endpoint、成員 ID 對應與部分輸出規則位於 `src/main/api/`；若網站 API 改版，可能需要同步調整。
-  - API endpoint、メンバー ID の対応表、出力ルールは `src/main/api/` にあります。サイト API の変更時は修正が必要になる場合があります。
-- 文章詳細取得與檔案輸出會忽略無效項目或個別失敗項目；請查看終端機 log 以排查問題。
-  - 詳細取得や画像保存で無効な項目・個別エラーはスキップされることがあります。問題調査時はターミナルの log を確認してください。
-- 登入 token 等敏感資料不要提交到 Git；專案的 `.gitignore` 已忽略一般使用者資料與輸出資料夾。
-  - ログイン token などの機密情報を Git にコミットしないでください。`.gitignore` では一般的なユーザーデータと出力フォルダを除外しています。
-
-## 授權／ライセンス
-
-本專案使用 MIT License。詳細請參閱 `package.json`。
-
-本プロジェクトは MIT License です。詳細は `package.json` を参照してください。
+ログイン token は `electron-store` により Electron のユーザーデータディレクトリへ保存され、プロジェクトフォルダには保存されません。token を他人に共有しないでください。
