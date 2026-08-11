@@ -55,6 +55,12 @@
 
           <button class="action-btn success" id="startExportBtn">ダウンロード開始</button>
 
+          <label class="download-setting" for="downloadConcurrencyInput">
+            <span>下載並發數／ダウンロード並列数</span>
+            <input id="downloadConcurrencyInput" type="number" min="1" max="32" value="5" inputmode="numeric" />
+          </label>
+          <p class="setting-hint">已存在文章會先以 AIMD 快速檢查；只有需要下載的文章使用此並發數（預設 5）。<br />既存投稿は AIMD で先に確認し、必要な投稿だけこの並列数で処理します（既定値 5）。</p>
+
           <div class="control-btns" style="display: flex; gap: 10px; justify-content: center;">
             <button class="action-btn" id="pauseBtn" style="display: none; background: #fdcb6e; color: #333;">一時停止</button>
             <button class="action-btn" id="cancelBtn" style="display: none; background: #d63031;">停止</button>

@@ -6,6 +6,10 @@ const getTokenBtn = document.getElementById('getTokenBtn');
 const openFolderBtn = document.getElementById('openFolderBtn');
 const progressSection = document.getElementById('progressSection');
 const progressMessage = document.getElementById('progressMessage');
+const downloadConcurrencyInput = document.getElementById('downloadConcurrencyInput');
+
+const DEFAULT_DOWNLOAD_CONCURRENCY = 5;
+const MAX_DOWNLOAD_CONCURRENCY = 32;
 
 // Export Control Buttons
 const startExportBtn = document.getElementById('startExportBtn');
@@ -37,11 +41,34 @@ let cachedDetails = [];
 // --- Initialization ---
 async function init() {
   await checkToken();
+  await loadDownloadSettings();
   setupEventListeners();
   
   // Initial UI state for controls
   if (pauseBtn) pauseBtn.style.display = 'none';
   if (cancelBtn) cancelBtn.style.display = 'none';
+}
+
+function normalizeDownloadConcurrency(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_DOWNLOAD_CONCURRENCY;
+  return Math.min(Math.max(parsed, 1), MAX_DOWNLOAD_CONCURRENCY);
+}
+
+async function loadDownloadSettings() {
+  if (!downloadConcurrencyInput) return;
+
+  const settings = await ipcRenderer.invoke('get-download-settings');
+  downloadConcurrencyInput.value = normalizeDownloadConcurrency(settings.concurrency);
+}
+
+async function saveDownloadSettings() {
+  if (!downloadConcurrencyInput) return DEFAULT_DOWNLOAD_CONCURRENCY;
+
+  const concurrency = normalizeDownloadConcurrency(downloadConcurrencyInput.value);
+  downloadConcurrencyInput.value = concurrency;
+  await ipcRenderer.invoke('save-download-settings', concurrency);
+  return concurrency;
 }
 
 // Check if token exists on startup
@@ -119,6 +146,10 @@ function setupEventListeners() {
     }
   });
 
+  if (downloadConcurrencyInput) {
+    downloadConcurrencyInput.addEventListener('change', saveDownloadSettings);
+  }
+
   // 3. Export Flow (The new 3-Step Process)
   startExportBtn.addEventListener('click', async () => {
     const token = await ipcRenderer.invoke('get-token');
@@ -126,6 +157,8 @@ function setupEventListeners() {
       alert('Please login first.');
       return;
     }
+
+    const downloadConcurrency = await saveDownloadSettings();
 
     // Reset UI for new export
     resetProgressBars();
@@ -150,16 +183,16 @@ function setupEventListeners() {
       console.log('Renderer: List fetched', cachedNotifications.length);
 
       // --- STEP 2: Fetch Details ---
-      updateStatus(`Step 2/3: Downloading Details for ${cachedNotifications.length} items...`, 0);
+      updateStatus(`Step 2/3: Checking existing posts and downloading details for ${cachedNotifications.length} items...`, 0);
       // Triggers 'export-progress' events
-      cachedDetails = await ipcRenderer.invoke('step-2-fetch-details', cachedNotifications);
+      cachedDetails = await ipcRenderer.invoke('step-2-fetch-details', cachedNotifications, downloadConcurrency);
       updateProgressVisuals('getPostDetails', 100);
       console.log('Renderer: Details fetched', cachedDetails.length);
 
       // --- STEP 3: Export Files ---
       updateStatus('Step 3/3: Saving Files & Images...', 0);
       // Triggers 'export-progress' events
-      const path = await ipcRenderer.invoke('step-3-export-files', cachedDetails);
+      const path = await ipcRenderer.invoke('step-3-export-files', cachedDetails, downloadConcurrency);
       updateProgressVisuals('exportPosts', 100);
 
       // Success

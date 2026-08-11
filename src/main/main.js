@@ -3,6 +3,14 @@ const path = require('path');
 const Store = require('electron-store');
 
 const store = new Store();
+const DEFAULT_DOWNLOAD_CONCURRENCY = 5;
+const MAX_DOWNLOAD_CONCURRENCY = 32;
+
+function normalizeDownloadConcurrency(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_DOWNLOAD_CONCURRENCY;
+  return Math.min(Math.max(parsed, 1), MAX_DOWNLOAD_CONCURRENCY);
+}
 
 // Global state control for the export process
 const exportState = {
@@ -58,6 +66,21 @@ ipcMain.handle('get-token', () => {
 ipcMain.handle('save-token', (event, token) => {
   store.set('token', token);
   return true;
+});
+
+// Download concurrency is user-configurable and persisted per installation.
+ipcMain.handle('get-download-settings', () => {
+  return {
+    concurrency: normalizeDownloadConcurrency(
+      store.get('downloadConcurrency', DEFAULT_DOWNLOAD_CONCURRENCY)
+    )
+  };
+});
+
+ipcMain.handle('save-download-settings', (event, value) => {
+  const concurrency = normalizeDownloadConcurrency(value);
+  store.set('downloadConcurrency', concurrency);
+  return concurrency;
 });
 
 // Open login window for token capture
@@ -185,6 +208,11 @@ ipcMain.handle('start-export', async (event) => {
   }
 
   try {
+    const exportedPath = path.join(app.getPath('userData'), 'exported');
+    const downloadConcurrency = normalizeDownloadConcurrency(
+      store.get('downloadConcurrency', DEFAULT_DOWNLOAD_CONCURRENCY)
+    );
+
     // Step 1: Get all posts
     mainWindow.webContents.send('export-progress', { step: 'getAllPosts', progress: 0, message: 'Fetching post list...' });
     const notifications = await handleGetAllPosts(token);
@@ -192,17 +220,16 @@ ipcMain.handle('start-export', async (event) => {
 
     // Step 2: Get post details
     mainWindow.webContents.send('export-progress', { step: 'getPostDetails', progress: 0, message: 'Fetching post details...' });
-    const postDetails = await handleGetPostDetails(token, notifications, (progress) => {
+    const postDetails = await handleGetPostDetails(token, notifications, exportedPath, exportState, (progress) => {
       mainWindow.webContents.send('export-progress', { step: 'getPostDetails', progress, message: `Fetching details: ${progress}%` });
-    });
+    }, downloadConcurrency);
     mainWindow.webContents.send('export-progress', { step: 'getPostDetails', progress: 100, message: `Fetched ${postDetails.length} posts` });
 
     // Step 3: Export posts
     mainWindow.webContents.send('export-progress', { step: 'exportPosts', progress: 0, message: 'Exporting posts...' });
-    const exportedPath = path.join(app.getPath('userData'), 'exported');
-    await handleExportPosts(postDetails, exportedPath, (progress) => {
+    await handleExportPosts(postDetails, exportedPath, exportState, (progress) => {
       mainWindow.webContents.send('export-progress', { step: 'exportPosts', progress, message: `Exporting: ${progress}%` });
-    });
+    }, downloadConcurrency);
     mainWindow.webContents.send('export-progress', { step: 'exportPosts', progress: 100, message: 'Export complete!' });
 
     return { success: true, path: exportedPath };
@@ -341,27 +368,30 @@ ipcMain.handle('step-1-fetch-list', async (event) => {
 });
 
 // Step 2: Get Post Details (With Pause Support)
-ipcMain.handle('step-2-fetch-details', async (event, notifications) => {
+ipcMain.handle('step-2-fetch-details', async (event, notifications, requestedConcurrency) => {
   const token = store.get('token');
+  const downloadConcurrency = normalizeDownloadConcurrency(requestedConcurrency);
+  const exportedPath = path.join(app.getPath('userData'), 'exported');
   console.log(`--- STEP 2 STARTED: Fetching Details for ${notifications.length} items ---`);
   
   // Pass the state object to allow pausing inside the loop
-  const details = await handleGetPostDetails(token, notifications, exportState, (progress, current, total) => {
+  const details = await handleGetPostDetails(token, notifications, exportedPath, exportState, (progress, current, total, meta = {}) => {
     // Send progress to UI
     event.sender.send('export-progress', { 
       step: 'getPostDetails', 
       progress, 
-      message: `Fetching: ${current}/${total}` 
+      message: `Fetching: ${current}/${total} (skipped: ${meta.skipped || 0})`
     });
-  });
+  }, downloadConcurrency);
 
   console.log('--- STEP 2 COMPLETE ---');
   return details;
 });
 
 // Step 3: Export Files (With Pause Support)
-ipcMain.handle('step-3-export-files', async (event, postDetails) => {
+ipcMain.handle('step-3-export-files', async (event, postDetails, requestedConcurrency) => {
   const exportedPath = path.join(app.getPath('userData'), 'exported');
+  const downloadConcurrency = normalizeDownloadConcurrency(requestedConcurrency);
   console.log(`--- STEP 3 STARTED: Exporting to ${exportedPath} ---`);
 
   await handleExportPosts(postDetails, exportedPath, exportState, (progress, current, total) => {
@@ -370,7 +400,7 @@ ipcMain.handle('step-3-export-files', async (event, postDetails) => {
       progress, 
       message: `Saving: ${current}/${total}` 
     });
-  });
+  }, downloadConcurrency);
 
   console.log('--- STEP 3 COMPLETE ---');
   return exportedPath;

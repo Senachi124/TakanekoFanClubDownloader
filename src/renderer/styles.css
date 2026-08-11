@@ -190,6 +190,33 @@ button, input, a {
   background: #00a185;
 }
 
+.download-setting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 18px 0 8px;
+  color: var(--text-color);
+  font-size: 0.9rem;
+}
+
+.download-setting input {
+  width: 64px;
+  padding: 8px 6px;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 6px;
+  background: rgba(0,0,0,0.2);
+  color: var(--text-color);
+  text-align: center;
+  font-size: 1rem;
+}
+
+.setting-hint {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
 .status-indicator {
   display: inline-block;
   padding: 8px 16px;

@@ -4,8 +4,9 @@ const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
 
-// CONFIG: Batch size for file operations
-const EXPORT_BATCH_SIZE = 5;
+const DEFAULT_CONCURRENCY = 5;
+const MAX_CONCURRENCY = 32;
+const POST_ID_FILENAME = '.post-id';
 
 // User ID Mapping
 const userMap = {
@@ -83,10 +84,16 @@ function downloadBinary(url) {
   });
 }
 
+function normalizeConcurrency(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_CONCURRENCY;
+  return Math.min(Math.max(parsed, 1), MAX_CONCURRENCY);
+}
+
 /**
  * Step 3: Export posts to files
  */
-async function handleExportPosts(postDetails, exportedPath, state, onProgress) {
+async function handleExportPosts(postDetails, exportedPath, state, onProgress, concurrency = DEFAULT_CONCURRENCY) {
   // Ensure root directory exists
   if (!fsSync.existsSync(exportedPath)) {
     await fs.mkdir(exportedPath, { recursive: true });
@@ -97,13 +104,15 @@ async function handleExportPosts(postDetails, exportedPath, state, onProgress) {
 
   console.log(`[Step 3] Exporting ${total} posts to disk...`);
 
-  // Batch Processing
-  for (let i = 0; i < total; i += EXPORT_BATCH_SIZE) {
+  const exportConcurrency = normalizeConcurrency(concurrency);
+
+  // Only posts that need to be written are processed in fixed-size batches.
+  for (let i = 0; i < total; i += exportConcurrency) {
     
     // 1. Check State
     await checkState(state);
 
-    const chunk = postDetails.slice(i, i + EXPORT_BATCH_SIZE);
+    const chunk = postDetails.slice(i, i + exportConcurrency);
     
     // 2. Process chunk
     await Promise.all(chunk.map(async (data) => {
@@ -169,6 +178,7 @@ async function processSinglePost(data, rootPath) {
   // Download Images (Sequential within a post to avoid EMFILE)
   let imageMd = '';
   let count = 1;
+  let hasDownloadFailure = false;
 
   for (const url of imageUrls) {
     const ext = path.extname(url.split('/').pop()) || '.jpg';
@@ -182,7 +192,8 @@ async function processSinglePost(data, rootPath) {
         await fs.writeFile(localPath, buffer);
         await fs.writeFile(galleryPath, buffer);
       } catch (e) {
-        // console.warn(`Failed to download ${url}`);
+        hasDownloadFailure = true;
+        console.warn(`[Step 3] Failed to download image for ${title}: ${e.message}`);
       }
     } else {
       // Ensure gallery copy exists
@@ -202,6 +213,15 @@ async function processSinglePost(data, rootPath) {
     `---\n\n${bodyMd}\n\n---\n\n${imageMd}`;
 
   await fs.writeFile(path.join(postDir, 'index.md'), mdContent, 'utf-8');
+
+  // This marker lets the next run skip the remote detail request for this post.
+  if (data.notificationReservationId && !hasDownloadFailure) {
+    await fs.writeFile(
+      path.join(postDir, POST_ID_FILENAME),
+      String(data.notificationReservationId),
+      'utf-8'
+    );
+  }
 }
 
 module.exports = { handleExportPosts };

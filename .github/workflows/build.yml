@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
-      - run: npm install
+      - run: npm ci
       - run: npm run build:mac
       - uses: actions/upload-artifact@v4
         with:
@@ -35,7 +35,7 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
-      - run: npm install
+      - run: npm ci
       - run: npm run build:win
       - uses: actions/upload-artifact@v4
         with:
@@ -56,12 +56,13 @@ jobs:
           name: win-build
           path: release-files
       - uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/v')
         with:
+          name: Takaneko Downloader ${{ github.ref_name }}
+          generate_release_notes: true
           files: |
             release-files/*.dmg
             release-files/*.zip
             release-files/*.exe
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
-          # secrets.GITHUB_TOKEN
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
