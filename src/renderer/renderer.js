@@ -9,7 +9,7 @@ const progressMessage = document.getElementById('progressMessage');
 const downloadConcurrencyInput = document.getElementById('downloadConcurrencyInput');
 
 const DEFAULT_DOWNLOAD_CONCURRENCY = 5;
-const MAX_DOWNLOAD_CONCURRENCY = 32;
+const MAX_DOWNLOAD_CONCURRENCY = 50;
 
 // Export Control Buttons
 const startExportBtn = document.getElementById('startExportBtn');
