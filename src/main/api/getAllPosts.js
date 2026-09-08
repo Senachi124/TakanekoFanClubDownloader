@@ -1,16 +1,10 @@
+// src/main/api/getAllPosts.js
 const { net } = require('electron');
 
-/**
- * Helper: Make a simple HTTP GET request with timeout
- * @param {string} url - Target URL
- * @param {object} headers - Request headers
- * @returns {Promise<any>} - Parsed JSON or Error
- */
 function httpGet(url, headers = {}) {
   return new Promise((resolve, reject) => {
     const request = net.request(url);
     
-    // Timeout protection (30 seconds)
     const timer = setTimeout(() => {
       request.abort();
       reject(new Error('Request timed out'));
@@ -51,9 +45,7 @@ function httpGet(url, headers = {}) {
 }
 
 /**
- * Step 1: Fetch all notification IDs from the API
- * @param {string} token - Bearer token
- * @returns {Promise<Array>} - Array of notification objects
+ * Step 1: Fetch all notifications from the API (without restricting to message type)
  */
 async function handleGetAllPosts(token) {
   const headers = { Authorization: token };
@@ -61,20 +53,19 @@ async function handleGetAllPosts(token) {
   try {
     console.log('[Step 1] Fetching total count...');
     
-    // 1. Get the total count of messages
-    const countUrl = 'https://api.takanekofc.com/auth/notifications/count?notificationType=message';
+    // 拿走 notificationType=message，改撈全部通知
+    const countUrl = 'https://api.takanekofc.com/auth/notifications/count';
     const countData = await httpGet(countUrl, headers);
-    const count = countData.count;
+    const count = countData.count || countData.total || 1000;
 
-    console.log(`[Step 1] Total message count found: ${count}`);
+    console.log(`[Step 1] Total notification count found: ${count}`);
 
-    // 2. Fetch all notifications in one go (Pagination limit set to count)
-    // Note: If API fails with 7000 items, we might need to paginate this too,
-    // but usually the list endpoint is lighter than details.
-    const notifUrl = `https://api.takanekofc.com/auth/notifications?notificationType=message&offset=0&limit=${count}&orderType=2&readType=all`;
+    // 取得全部通知清單
+    const notifUrl = `https://api.takanekofc.com/auth/notifications?offset=0&limit=${count}&orderType=2&readType=all`;
     const notifications = await httpGet(notifUrl, headers);
 
-    return notifications;
+    const list = Array.isArray(notifications) ? notifications : (notifications.items || notifications.data || []);
+    return list;
   } catch (error) {
     console.error('[Step 1] Error:', error.message);
     throw error;

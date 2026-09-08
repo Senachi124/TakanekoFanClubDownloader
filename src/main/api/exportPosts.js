@@ -23,6 +23,8 @@ const userMap = {
   'VaKS0gcqUZTDi_asf5Xn2': '涼海すう'
 };
 
+const DEFAULT_FALLBACK_USER_ID = '6lToHXxrSpkyDT9jmPUOE'; // たかねこファンクラブ運営
+
 // --- Helper Functions ---
 
 async function checkState(state) {
@@ -59,7 +61,7 @@ function htmlToMarkdown(htmlContent) {
   const images = [];
   $('img').each((_, img) => {
     const src = $(img).attr('src');
-    if (src && src.trim()) images.push(src);
+    if (src && src.trim()) images.push(src.trim());
   });
   $('br').replaceWith('\n');
   let text = '';
@@ -94,7 +96,6 @@ function normalizeConcurrency(value) {
  * Step 3: Export posts to files
  */
 async function handleExportPosts(postDetails, exportedPath, state, onProgress, concurrency = DEFAULT_CONCURRENCY) {
-  // Ensure root directory exists
   if (!fsSync.existsSync(exportedPath)) {
     await fs.mkdir(exportedPath, { recursive: true });
   }
@@ -106,15 +107,11 @@ async function handleExportPosts(postDetails, exportedPath, state, onProgress, c
 
   const exportConcurrency = normalizeConcurrency(concurrency);
 
-  // Only posts that need to be written are processed in fixed-size batches.
   for (let i = 0; i < total; i += exportConcurrency) {
-    
-    // 1. Check State
     await checkState(state);
 
     const chunk = postDetails.slice(i, i + exportConcurrency);
     
-    // 2. Process chunk
     await Promise.all(chunk.map(async (data) => {
       try {
         await processSinglePost(data, exportedPath);
@@ -125,13 +122,11 @@ async function handleExportPosts(postDetails, exportedPath, state, onProgress, c
 
     processedCount += chunk.length;
 
-    // 3. Report Progress
     if (onProgress) {
       const percentage = Math.round((processedCount / total) * 100);
       onProgress(percentage, processedCount, total);
     }
     
-    // 4. Yield
     await new Promise(r => setTimeout(r, 10));
   }
 }
@@ -140,26 +135,26 @@ async function handleExportPosts(postDetails, exportedPath, state, onProgress, c
  * Process a single post: Write MD and download images
  */
 async function processSinglePost(data, rootPath) {
-  const senderId = data.sendingOfficialUserId;
-  if (!senderId) return;
+  const senderId = data.sendingOfficialUserId || DEFAULT_FALLBACK_USER_ID;
 
   const senderName = (userMap[senderId] || senderId).replace(/ /g, '');
   const senderDir = path.join(rootPath, senderName);
   const picturesDir = path.join(senderDir, 'pictures');
-  const releaseStr = formatDateForFilename(data.releaseDate);
-  const title = (data.title || 'untitled').replace(/[/\\:*?"<>|]/g, '_');
+
+  const releaseTime = data.releaseDate || data.displayDate || data.publishedAt || data.createdAt || data.sentAt || Date.now();
+  const releaseStr = formatDateForFilename(releaseTime);
+
+  const rawTitle = data.title || data.subject || (data.message ? data.message.slice(0, 20) : 'untitled');
+  const title = String(rawTitle).replace(/[/\\:*?"<>|]/g, '_').trim();
   const postDir = path.join(senderDir, `${releaseStr}_${title}`);
 
-  // Create dirs
   await fs.mkdir(senderDir, { recursive: true });
   await fs.mkdir(picturesDir, { recursive: true });
   await fs.mkdir(postDir, { recursive: true });
 
-  // Extract content
   let bodyMd = '';
   let imageUrls = [];
 
-  // Body images
   Object.keys(data).sort().forEach(k => {
     if (k.startsWith('body') && data[k]) {
       const res = htmlToMarkdown(data[k]);
@@ -168,20 +163,28 @@ async function processSinglePost(data, rootPath) {
     }
   });
 
-  // Header images
+  if (!bodyMd.trim()) {
+    const fallbackText = data.message || data.content || data.text || '';
+    if (fallbackText) {
+      const res = htmlToMarkdown(fallbackText);
+      bodyMd += res.text + '\n\n';
+      imageUrls.push(...res.images);
+    }
+  }
+
   Object.keys(data).sort().forEach(k => {
     if (k.startsWith('image') && data[k]) {
-      imageUrls.push(`https://takanekofc.com/${data[k]}`);
+      const imgPath = data[k].startsWith('http') ? data[k] : `https://takanekofc.com/${data[k].replace(/^\//, '')}`;
+      imageUrls.push(imgPath);
     }
   });
 
-  // Download Images (Sequential within a post to avoid EMFILE)
   let imageMd = '';
   let count = 1;
   let hasDownloadFailure = false;
 
   for (const url of imageUrls) {
-    const ext = path.extname(url.split('/').pop()) || '.jpg';
+    const ext = path.extname(url.split('?')[0].split('/').pop()) || '.jpg';
     const filename = `${releaseStr}_${String(count).padStart(2, '0')}${ext}`;
     const localPath = path.join(postDir, filename);
     const galleryPath = path.join(picturesDir, filename);
@@ -196,7 +199,6 @@ async function processSinglePost(data, rootPath) {
         console.warn(`[Step 3] Failed to download image for ${title}: ${e.message}`);
       }
     } else {
-      // Ensure gallery copy exists
       if (!fsSync.existsSync(galleryPath)) {
         await fs.copyFile(localPath, galleryPath).catch(()=>{});
       }
@@ -206,15 +208,13 @@ async function processSinglePost(data, rootPath) {
     count++;
   }
 
-  // Write Markdown
-  const mdContent = `# ${title}\n\n` +
+  const mdContent = `# ${rawTitle}\n\n` +
     `**Sender**: ${senderName}\n` +
-    `**Date**: ${formatTimestamp(data.releaseDate)}\n\n` +
+    `**Date**: ${formatTimestamp(releaseTime)}\n\n` +
     `---\n\n${bodyMd}\n\n---\n\n${imageMd}`;
 
   await fs.writeFile(path.join(postDir, 'index.md'), mdContent, 'utf-8');
 
-  // This marker lets the next run skip the remote detail request for this post.
   if (data.notificationReservationId && !hasDownloadFailure) {
     await fs.writeFile(
       path.join(postDir, POST_ID_FILENAME),

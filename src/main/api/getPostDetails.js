@@ -5,10 +5,10 @@ const path = require('path');
 const DEFAULT_CONCURRENCY = 5;
 const MAX_CONCURRENCY = 32;
 const POST_ID_FILENAME = '.post-id';
+const DEFAULT_SYSTEM_USER_ID = '6lToHXxrSpkyDT9jmPUOE'; // たかねこファンクラブ運営
 
 /**
  * Helper: Check pause/cancel state
- * Stops the loop if paused, throws error if cancelled.
  */
 async function checkState(state) {
   if (state && state.isCancelled) {
@@ -17,7 +17,6 @@ async function checkState(state) {
   
   if (state && state.isPaused) {
     console.log('⏸️ [Step 2] Process PAUSED. Waiting for resume...');
-    // Poll every 500ms
     while (state.isPaused) {
       if (state.isCancelled) throw new Error('Process cancelled by user');
       await new Promise(r => setTimeout(r, 500));
@@ -33,7 +32,6 @@ function makeRequest(url, headers) {
   return new Promise((resolve, reject) => {
     const request = net.request(url);
     
-    // 15s timeout per request
     const timeout = setTimeout(() => {
       request.abort();
       reject(new Error('Timeout'));
@@ -51,7 +49,6 @@ function makeRequest(url, headers) {
       response.on('end', () => {
         clearTimeout(timeout);
         try {
-          // Attempt to parse JSON. If response is empty or invalid, return null data.
           const json = JSON.parse(data);
           resolve({ status: response.statusCode, data: json });
         } catch (e) {
@@ -75,11 +72,6 @@ function normalizeConcurrency(value) {
   return Math.min(Math.max(parsed, 1), MAX_CONCURRENCY);
 }
 
-/**
- * Find exported post folders once before making detail requests.
- * Each new export writes a .post-id marker, so existing posts can be skipped
- * without calling the remote detail endpoint again.
- */
 async function collectPostFolders(exportedPath) {
   try {
     const members = await fs.readdir(exportedPath, { withFileTypes: true });
@@ -101,10 +93,6 @@ async function collectPostFolders(exportedPath) {
   }
 }
 
-/**
- * Read .post-id markers with AIMD concurrency.
- * Successful checks add one worker; an I/O failure halves the worker count.
- */
 async function loadExistingPostIds(exportedPath, state, initialConcurrency) {
   const postFolders = await collectPostFolders(exportedPath);
   const existingIds = new Set();
@@ -121,8 +109,6 @@ async function loadExistingPostIds(exportedPath, state, initialConcurrency) {
         const postId = (await fs.readFile(path.join(postFolder, POST_ID_FILENAME), 'utf8')).trim();
         return { postId, success: true };
       } catch (error) {
-        // A missing marker is expected for exports created before this index
-        // was introduced, so it should not reduce AIMD concurrency.
         if (error.code === 'ENOENT') return { postId: null, success: true };
         return { postId: null, success: false };
       }
@@ -144,12 +130,6 @@ async function loadExistingPostIds(exportedPath, state, initialConcurrency) {
 
 /**
  * Step 2: Fetch detailed content for each notification
- * @param {string} token - Auth token
- * @param {Array} notifications - List of IDs
- * @param {string} exportedPath - Root directory containing previous exports
- * @param {Object} state - Control state { isPaused, isCancelled }
- * @param {Function} onProgress - Callback (percent, current, total)
- * @param {number} concurrency - Maximum concurrent detail requests
  */
 async function handleGetPostDetails(token, notifications, exportedPath, state, onProgress, concurrency = DEFAULT_CONCURRENCY) {
   const headers = { Authorization: token };
@@ -175,16 +155,13 @@ async function handleGetPostDetails(token, notifications, exportedPath, state, o
     );
   }
 
-  // Only posts that are not already exported are processed in fixed-size batches.
   const requestConcurrency = normalizeConcurrency(concurrency);
   for (let i = 0; i < pendingNotifications.length; i += requestConcurrency) {
     
-    // 1. Check if user paused or cancelled
     await checkState(state);
 
     const chunk = pendingNotifications.slice(i, i + requestConcurrency);
     
-    // 2. Process current batch in parallel
     const promises = chunk.map(async (entry) => {
       const id = entry.notificationReservationId;
       if (!id) return null;
@@ -192,10 +169,13 @@ async function handleGetPostDetails(token, notifications, exportedPath, state, o
       try {
         const response = await makeRequest(apiUrl + id, headers);
         if (response.status === 200 && response.data) {
-          // Basic validation
-          if (response.data.sendingOfficialUserId) {
-            return { ...response.data, notificationReservationId: id };
-          }
+          // Allow system messages with missing sendingOfficialUserId
+          const senderId = response.data.sendingOfficialUserId || DEFAULT_SYSTEM_USER_ID;
+          return { 
+            ...response.data, 
+            sendingOfficialUserId: senderId,
+            notificationReservationId: id 
+          };
         }
       } catch (err) {
         console.warn(`[Step 2] Failed to fetch ID ${id}: ${err.message}`);
@@ -203,17 +183,14 @@ async function handleGetPostDetails(token, notifications, exportedPath, state, o
       return null;
     });
 
-    // Wait for batch to finish
     const results = await Promise.all(promises);
 
-    // Filter valid results
     results.forEach(res => {
       if (res) validPosts.push(res);
     });
 
     processedCount += chunk.length;
 
-    // 3. Report Progress to UI
     if (onProgress) {
       const percentage = Math.round((processedCount / total) * 100);
       onProgress(percentage, processedCount, total, {
@@ -222,8 +199,6 @@ async function handleGetPostDetails(token, notifications, exportedPath, state, o
       });
     }
 
-    // 4. Important: Yield to Event Loop
-    // This small delay prevents the UI from freezing entirely
     await new Promise(r => setTimeout(r, 50));
   }
 
