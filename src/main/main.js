@@ -4,7 +4,10 @@ const Store = require('electron-store');
 const packageInfo = require('../../package.json');
 
 const store = new Store();
-const APP_NAME = packageInfo.build.productName;
+const APP_NAME = packageInfo.productName
+  || packageInfo.build?.productName
+  || app.getName()
+  || 'Takaneko Fanclub Downloader';
 const DEFAULT_DOWNLOAD_CONCURRENCY = 5;
 const MAX_DOWNLOAD_CONCURRENCY = 32;
 
