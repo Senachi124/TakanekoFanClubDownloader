@@ -1,6 +1,7 @@
 const { ipcRenderer } = require('electron');
 
 // --- DOM Elements ---
+const appName = document.getElementById('appName');
 const tokenStatus = document.getElementById('tokenStatus');
 const getTokenBtn = document.getElementById('getTokenBtn');
 const openFolderBtn = document.getElementById('openFolderBtn');
@@ -8,6 +9,8 @@ const progressSection = document.getElementById('progressSection');
 const progressMessage = document.getElementById('progressMessage');
 const downloadConcurrencyInput = document.getElementById('downloadConcurrencyInput');
 const backupBlogsInput = document.getElementById('backupBlogsInput');
+const backupGalleryInput = document.getElementById('backupGalleryInput');
+const backupMoviesInput = document.getElementById('backupMoviesInput');
 
 const DEFAULT_DOWNLOAD_CONCURRENCY = 5;
 const MAX_DOWNLOAD_CONCURRENCY = 50;
@@ -49,6 +52,7 @@ let viewMode = 'photos'; // 'photos' or 'posts'
 
 // --- Initialization ---
 async function init() {
+  await loadAppInfo();
   await checkToken();
   await loadDownloadSettings();
   setupEventListeners();
@@ -56,6 +60,13 @@ async function init() {
   // Initial UI state for controls
   if (pauseBtn) pauseBtn.style.display = 'none';
   if (cancelBtn) cancelBtn.style.display = 'none';
+}
+
+async function loadAppInfo() {
+  if (!appName) return;
+
+  const info = await ipcRenderer.invoke('get-app-info');
+  appName.textContent = `${info.name} v${info.version}`;
 }
 
 function normalizeDownloadConcurrency(value) {
@@ -74,6 +85,18 @@ async function loadDownloadSettings() {
   if (backupBlogsInput) {
     const savedSetting = localStorage.getItem('backupManagerBlogs');
     backupBlogsInput.checked = savedSetting !== 'false';
+  }
+
+  // Load Gallery toggle preference (default: true)
+  if (backupGalleryInput) {
+    const savedSetting = localStorage.getItem('backupGallery');
+    backupGalleryInput.checked = savedSetting !== 'false';
+  }
+
+  // Load Movie toggle preference (default: true)
+  if (backupMoviesInput) {
+    const savedSetting = localStorage.getItem('backupMovies');
+    backupMoviesInput.checked = savedSetting !== 'false';
   }
 }
 
@@ -172,6 +195,18 @@ function setupEventListeners() {
     });
   }
 
+  if (backupGalleryInput) {
+    backupGalleryInput.addEventListener('change', () => {
+      localStorage.setItem('backupGallery', backupGalleryInput.checked ? 'true' : 'false');
+    });
+  }
+
+  if (backupMoviesInput) {
+    backupMoviesInput.addEventListener('change', () => {
+      localStorage.setItem('backupMovies', backupMoviesInput.checked ? 'true' : 'false');
+    });
+  }
+
   // 4. Export Flow
   startExportBtn.addEventListener('click', async () => {
     const token = await ipcRenderer.invoke('get-token');
@@ -222,6 +257,24 @@ function setupEventListeners() {
         await ipcRenderer.invoke('step-blogs-export');
       } else {
         console.log('Skipping Manager Blog download per user setting.');
+      }
+
+      // --- STEP 5: Backup Gallery ---
+      const shouldBackupGallery = backupGalleryInput ? backupGalleryInput.checked : true;
+      if (shouldBackupGallery) {
+        updateStatus('Step 5: Backing up FC Gallery...');
+        await ipcRenderer.invoke('step-gallery-export');
+      } else {
+        console.log('Skipping Gallery download per user setting.');
+      }
+
+      // --- STEP 6: Backup Movies ---
+      const shouldBackupMovies = backupMoviesInput ? backupMoviesInput.checked : true;
+      if (shouldBackupMovies) {
+        updateStatus('Step 6: Backing up FC Movies ...');
+        await ipcRenderer.invoke('step-movies-export');
+      } else {
+        console.log('Skipping Movies download per user setting.');
       }
 
       // Success
