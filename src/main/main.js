@@ -1,8 +1,10 @@
 const { app, BrowserWindow, ipcMain, shell, dialog, session } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
+const packageInfo = require('../../package.json');
 
 const store = new Store();
+const APP_NAME = packageInfo.build.productName;
 const DEFAULT_DOWNLOAD_CONCURRENCY = 5;
 const MAX_DOWNLOAD_CONCURRENCY = 32;
 
@@ -33,6 +35,7 @@ function createWindow() {
     backgroundColor: '#1a1a2e'
   });
 
+  mainWindow.setTitle(`${APP_NAME} v${app.getVersion()}`);
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 }
 
@@ -61,6 +64,12 @@ const { handleExportPosts } = require('./api/exportPosts');
 ipcMain.handle('get-token', () => {
   return store.get('token', null);
 });
+
+// Expose the packaged app name and runtime version to the renderer UI.
+ipcMain.handle('get-app-info', () => ({
+  name: APP_NAME,
+  version: app.getVersion()
+}));
 
 // Save token
 ipcMain.handle('save-token', (event, token) => {
@@ -94,7 +103,7 @@ ipcMain.handle('open-login', async () => {
     },
     parent: mainWindow,
     modal: false,
-    title: 'Login to Takaneko FC'
+    title: `Login to ${APP_NAME}`
   });
 
   loginWindow.loadURL('https://takanekofc.com/#/login');

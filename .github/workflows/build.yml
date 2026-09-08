@@ -58,7 +58,7 @@ jobs:
       - uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/v')
         with:
-          name: Takaneko Downloader ${{ github.ref_name }}
+          name: Takaneko Fanclub Downloader ${{ github.ref_name }}
           generate_release_notes: true
           files: |
             release-files/*.dmg

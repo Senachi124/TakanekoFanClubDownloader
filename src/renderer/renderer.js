@@ -1,6 +1,7 @@
 const { ipcRenderer } = require('electron');
 
 // --- DOM Elements ---
+const appName = document.getElementById('appName');
 const tokenStatus = document.getElementById('tokenStatus');
 const getTokenBtn = document.getElementById('getTokenBtn');
 const openFolderBtn = document.getElementById('openFolderBtn');
@@ -49,6 +50,7 @@ let viewMode = 'photos'; // 'photos' or 'posts'
 
 // --- Initialization ---
 async function init() {
+  await loadAppInfo();
   await checkToken();
   await loadDownloadSettings();
   setupEventListeners();
@@ -56,6 +58,13 @@ async function init() {
   // Initial UI state for controls
   if (pauseBtn) pauseBtn.style.display = 'none';
   if (cancelBtn) cancelBtn.style.display = 'none';
+}
+
+async function loadAppInfo() {
+  if (!appName) return;
+
+  const info = await ipcRenderer.invoke('get-app-info');
+  appName.textContent = `${info.name} v${info.version}`;
 }
 
 function normalizeDownloadConcurrency(value) {
