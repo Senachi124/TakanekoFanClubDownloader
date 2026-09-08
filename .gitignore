@@ -5,6 +5,9 @@ node_modules/
 dist/
 out/
 
+# Windows media tools are downloaded during the Windows build
+resources/tools/windows/
+
 # Electron
 *.log
 *.pid

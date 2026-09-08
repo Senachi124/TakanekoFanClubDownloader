@@ -4,6 +4,7 @@ const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const { getYtDlpConfig } = require('../utils/mediaTools');
 
 const DEFAULT_CONCURRENCY = 5;
 const MAX_CONCURRENCY = 32;
@@ -128,6 +129,7 @@ function downloadWithYtDlp(vimeoId, destPath) {
       ? 'VideoConvertor:-c:v hevc_videotoolbox -q:v 60 -c:a aac'
       : 'VideoConvertor:-c:v libx265 -crf 23 -preset fast -c:a aac';
 
+    const { command, ffmpegLocation } = getYtDlpConfig();
     const args = [
       '--referer', 'https://takanekofc.com/',
       '--concurrent-fragments', '5',
@@ -137,9 +139,10 @@ function downloadWithYtDlp(vimeoId, destPath) {
       '-o', destPath,
       videoUrl
     ];
+    if (ffmpegLocation) args.unshift('--ffmpeg-location', ffmpegLocation);
 
     console.log(`[yt-dlp] Starting video download (H.265 mode): ${videoUrl}`);
-    const proc = spawn('yt-dlp', args);
+    const proc = spawn(command, args);
 
     proc.stdout.on('data', (data) => {
       const msg = data.toString().trim();
@@ -163,7 +166,7 @@ function downloadWithYtDlp(vimeoId, destPath) {
 
     proc.on('error', (err) => {
       if (err.code === 'ENOENT') {
-        reject(new Error('yt-dlp not found. Please install it via "brew install yt-dlp ffmpeg"'));
+        reject(new Error('yt-dlp is not available. Please reinstall the app or install yt-dlp and ffmpeg manually.'));
       } else {
         reject(err);
       }

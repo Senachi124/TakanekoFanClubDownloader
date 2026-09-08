@@ -14,8 +14,8 @@ Takaneko Fanclub の投稿・画像・Markdown を保存し、デスクトップ
 
 通常の利用では Node.js のインストールは不要です。[Releases](https://github.com/Senachi124/TakanekoFanClubDownloader/releases) から OS に合うファイルをダウンロードしてください。
 
-- Windows：下載 `.exe`；`Setup` 版本會安裝到系統，另一個 `.exe` 可直接執行。
-  - Windows：`.exe` をダウンロードします。`Setup` 版はインストール用、もう一方の `.exe` は直接実行できます。
+- Windows：下載 `.exe`；`Setup` 版本會安裝到系統，另一個 `.exe` 可直接執行。Windows 版本已內含影片下載所需工具，不需要另外安裝 Node.js、yt-dlp 或 ffmpeg。
+  - Windows：`.exe` をダウンロードします。`Setup` 版はインストール用、もう一方の `.exe` は直接実行できます。動画ダウンロードに必要なツールは同梱されているため、Node.js・yt-dlp・ffmpeg の別途インストールは不要です。
 - macOS：下載 `.dmg` 後拖曳到 Applications；`.zip` 可解壓縮後使用。
   - macOS：`.dmg` を開いて Applications にコピーします。`.zip` は解凍して使用できます。
 

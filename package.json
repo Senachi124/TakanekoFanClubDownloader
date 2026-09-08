@@ -1,13 +1,13 @@
 {
   "name": "takaneko-downloader",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Takaneko Fanclub Content Downloader",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
     "build:mac": "electron-builder --mac",
-    "build:win": "electron-builder --win"
+    "build:win": "node scripts/prepare-windows-tools.js && electron-builder --win"
   },
   "author": "Takaneko Fan",
   "license": "MIT",
@@ -26,6 +26,17 @@
       "output": "dist"
     },
     "publish": null,
+    "extraResources": [
+      {
+        "from": "resources/tools/windows",
+        "to": "tools/windows",
+        "filter": [
+          "yt-dlp.exe",
+          "ffmpeg.exe",
+          "ffprobe.exe"
+        ]
+      }
+    ],
     "mac": {
       "category": "public.app-category.utilities",
       "target": [
