@@ -405,3 +405,18 @@ ipcMain.handle('step-3-export-files', async (event, postDetails, requestedConcur
   console.log('--- STEP 3 COMPLETE ---');
   return exportedPath;
 });
+
+const { handleBackupTopicsBlogs } = require('./api/exportBlogs');
+
+ipcMain.handle('step-blogs-export', async (event) => {
+  const token = store.get('token');
+  if (!token) return;
+  const exportedPath = path.join(app.getPath('userData'), 'exported');
+  await handleBackupTopicsBlogs(token, exportedPath, exportState, (current, total) => {
+    event.sender.send('export-progress', {
+      step: 'exportPosts',
+      progress: Math.round((current / total) * 100),
+      message: `Saving Manager Blogs: ${current}/${total}`
+    });
+  });
+});

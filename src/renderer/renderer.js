@@ -7,14 +7,13 @@ const openFolderBtn = document.getElementById('openFolderBtn');
 const progressSection = document.getElementById('progressSection');
 const progressMessage = document.getElementById('progressMessage');
 const downloadConcurrencyInput = document.getElementById('downloadConcurrencyInput');
+const backupBlogsInput = document.getElementById('backupBlogsInput');
 
 const DEFAULT_DOWNLOAD_CONCURRENCY = 5;
 const MAX_DOWNLOAD_CONCURRENCY = 50;
 
 // Export Control Buttons
 const startExportBtn = document.getElementById('startExportBtn');
-// Note: Ensure you have added these buttons to your HTML as per previous instructions
-// If not, add <button id="pauseBtn"> and <button id="cancelBtn"> in index.html
 const pauseBtn = document.getElementById('pauseBtn'); 
 const cancelBtn = document.getElementById('cancelBtn');
 
@@ -28,15 +27,25 @@ const modalImage = document.getElementById('modalImage');
 const navBtns = document.querySelectorAll('.nav-btn');
 const views = document.querySelectorAll('.view');
 
-// Gallery
+// Gallery Elements
 const memberTabs = document.getElementById('memberTabs');
-const galleryGrid = document.getElementById('galleryGrid');
+const subNav = document.getElementById('subNav');
+const btnShowPhotos = document.getElementById('btnShowPhotos');
+const btnShowPosts = document.getElementById('btnShowPosts');
+const imageWall = document.getElementById('imageWall');
+const postList = document.getElementById('postList');
+const galleryEmptyText = document.getElementById('galleryEmptyText');
+const postViewer = document.getElementById('postViewer');
+const viewerContent = document.getElementById('viewerContent');
+const viewerTitle = document.getElementById('viewerTitle');
 
 // --- Global State ---
 let currentGalleryData = {};
 let isPaused = false;
 let cachedNotifications = [];
 let cachedDetails = [];
+let activeMember = null;
+let viewMode = 'photos'; // 'photos' or 'posts'
 
 // --- Initialization ---
 async function init() {
@@ -56,10 +65,16 @@ function normalizeDownloadConcurrency(value) {
 }
 
 async function loadDownloadSettings() {
-  if (!downloadConcurrencyInput) return;
+  if (downloadConcurrencyInput) {
+    const settings = await ipcRenderer.invoke('get-download-settings');
+    downloadConcurrencyInput.value = normalizeDownloadConcurrency(settings.concurrency);
+  }
 
-  const settings = await ipcRenderer.invoke('get-download-settings');
-  downloadConcurrencyInput.value = normalizeDownloadConcurrency(settings.concurrency);
+  // Load Manager Blog toggle preference (default: true)
+  if (backupBlogsInput) {
+    const savedSetting = localStorage.getItem('backupManagerBlogs');
+    backupBlogsInput.checked = savedSetting !== 'false';
+  }
 }
 
 async function saveDownloadSettings() {
@@ -146,11 +161,18 @@ function setupEventListeners() {
     }
   });
 
+  // 3. Settings Persistence
   if (downloadConcurrencyInput) {
     downloadConcurrencyInput.addEventListener('change', saveDownloadSettings);
   }
 
-  // 3. Export Flow (The new 3-Step Process)
+  if (backupBlogsInput) {
+    backupBlogsInput.addEventListener('change', () => {
+      localStorage.setItem('backupManagerBlogs', backupBlogsInput.checked ? 'true' : 'false');
+    });
+  }
+
+  // 4. Export Flow
   startExportBtn.addEventListener('click', async () => {
     const token = await ipcRenderer.invoke('get-token');
     if (!token) {
@@ -184,16 +206,23 @@ function setupEventListeners() {
 
       // --- STEP 2: Fetch Details ---
       updateStatus(`Step 2/3: Checking existing posts and downloading details for ${cachedNotifications.length} items...`, 0);
-      // Triggers 'export-progress' events
       cachedDetails = await ipcRenderer.invoke('step-2-fetch-details', cachedNotifications, downloadConcurrency);
       updateProgressVisuals('getPostDetails', 100);
       console.log('Renderer: Details fetched', cachedDetails.length);
 
       // --- STEP 3: Export Files ---
       updateStatus('Step 3/3: Saving Files & Images...', 0);
-      // Triggers 'export-progress' events
       const path = await ipcRenderer.invoke('step-3-export-files', cachedDetails, downloadConcurrency);
       updateProgressVisuals('exportPosts', 100);
+
+      // --- STEP 4: Backup Manager Blogs (TOPICS) ---
+      const shouldBackupBlogs = backupBlogsInput ? backupBlogsInput.checked : true;
+      if (shouldBackupBlogs) {
+        updateStatus('Step 4: Backing up Manager Blogs...');
+        await ipcRenderer.invoke('step-blogs-export');
+      } else {
+        console.log('Skipping Manager Blog download per user setting.');
+      }
 
       // Success
       updateStatus(`Export Complete! Saved to: ${path}`);
@@ -211,14 +240,14 @@ function setupEventListeners() {
     }
   });
 
-  // 4. Pause / Resume Logic
+  // 5. Pause / Resume Logic
   if (pauseBtn) {
     pauseBtn.addEventListener('click', async () => {
       if (!isPaused) {
         await ipcRenderer.invoke('control-pause');
         isPaused = true;
         pauseBtn.textContent = 'Resume';
-        pauseBtn.classList.add('warning'); // Assuming you have a .warning CSS class
+        pauseBtn.classList.add('warning');
         updateStatus('⚠️ Process Paused');
       } else {
         await ipcRenderer.invoke('control-resume');
@@ -230,22 +259,21 @@ function setupEventListeners() {
     });
   }
 
-  // 5. Cancel Logic
+  // 6. Cancel Logic
   if (cancelBtn) {
     cancelBtn.addEventListener('click', async () => {
       if (confirm('Are you sure you want to stop? Progress will be lost.')) {
         await ipcRenderer.invoke('control-cancel');
-        // The catch block in startExportBtn will handle the UI reset
       }
     });
   }
 
-  // 6. Open Folder
+  // 7. Open Folder
   openFolderBtn.addEventListener('click', async () => {
     await ipcRenderer.invoke('open-exported-folder');
   });
 
-  // 7. Image Modal
+  // 8. Image Modal Listeners
   document.getElementById('closeImageBtn').addEventListener('click', () => {
     imageModal.classList.remove('active');
   });
@@ -255,6 +283,20 @@ function setupEventListeners() {
       imageModal.classList.remove('active');
     }
   });
+
+  // 9. Gallery Sub-nav & Post Viewer Listeners
+  if (btnShowPhotos) {
+    btnShowPhotos.addEventListener('click', () => switchGalleryMode('photos'));
+  }
+  if (btnShowPosts) {
+    btnShowPosts.addEventListener('click', () => switchGalleryMode('posts'));
+  }
+  const closeViewerBtn = document.getElementById('closeViewerBtn');
+  if (closeViewerBtn) {
+    closeViewerBtn.addEventListener('click', () => {
+      postViewer.classList.remove('active');
+    });
+  }
 }
 
 // --- UI Helper Functions ---
@@ -280,7 +322,6 @@ function resetProgressBars() {
   });
 }
 
-// Handle manual updates (mostly for Step 1 completion)
 function updateProgressVisuals(step, progress) {
   const steps = {
     'getAllPosts': 'progress1',
@@ -305,10 +346,8 @@ function updateProgressVisuals(step, progress) {
 ipcRenderer.on('export-progress', (event, data) => {
   const { step, progress, message } = data;
   
-  // Update Message
   if (message) updateStatus(message);
 
-  // Update Bar
   const steps = {
     'getAllPosts': 'progress1',
     'getPostDetails': 'progress2',
@@ -331,7 +370,6 @@ ipcRenderer.on('export-progress', (event, data) => {
     }
   }
 
-  // Chain Visuals: If in step 2, step 1 must be done
   if (step === 'getPostDetails') {
     updateProgressVisuals('getAllPosts', 100);
   } else if (step === 'exportPosts') {
@@ -341,39 +379,6 @@ ipcRenderer.on('export-progress', (event, data) => {
 });
 
 // --- Gallery Logic ---
-
-// State
-let activeMember = null;
-let viewMode = 'photos'; // 'photos' or 'posts'
-
-// Elements
-const subNav = document.getElementById('subNav');
-const btnShowPhotos = document.getElementById('btnShowPhotos');
-const btnShowPosts = document.getElementById('btnShowPosts');
-const imageWall = document.getElementById('imageWall');
-const postList = document.getElementById('postList');
-const galleryEmptyText = document.getElementById('galleryEmptyText');
-const postViewer = document.getElementById('postViewer');
-const viewerContent = document.getElementById('viewerContent');
-const viewerTitle = document.getElementById('viewerTitle');
-
-// Setup Gallery Listeners (Call this in setupEventListeners)
-function setupGalleryListeners() {
-  btnShowPhotos.addEventListener('click', () => switchGalleryMode('photos'));
-  btnShowPosts.addEventListener('click', () => switchGalleryMode('posts'));
-  
-  document.getElementById('closeViewerBtn').addEventListener('click', () => {
-    postViewer.classList.remove('active');
-  });
-}
-
-// Add this line to your main setupEventListeners function!
-btnShowPhotos.addEventListener('click', () => switchGalleryMode('photos'));
-btnShowPosts.addEventListener('click', () => switchGalleryMode('posts'));
-document.getElementById('closeViewerBtn').addEventListener('click', () => {
-    postViewer.classList.remove('active');
-});
-
 
 function switchView(viewName) {
   navBtns.forEach(btn => {
@@ -423,25 +428,21 @@ function renderMemberTabs() {
 }
 
 function selectMember(member, tab) {
-  // Update Tabs UI
   document.querySelectorAll('.member-tab').forEach(t => t.classList.remove('active'));
   tab.classList.add('active');
   
   activeMember = member;
   subNav.style.display = 'flex';
   
-  // Refresh Content
   switchGalleryMode(viewMode);
 }
 
 function switchGalleryMode(mode) {
   viewMode = mode;
   
-  // Update Buttons
   btnShowPhotos.classList.toggle('active', mode === 'photos');
   btnShowPosts.classList.toggle('active', mode === 'posts');
   
-  // Toggle Containers
   imageWall.style.display = mode === 'photos' ? 'grid' : 'none';
   postList.style.display = mode === 'posts' ? 'flex' : 'none';
   
@@ -470,7 +471,6 @@ function renderImageWall(images) {
     return;
   }
 
-  // Lazy loading using Fragment for performance
   const fragment = document.createDocumentFragment();
 
   images.forEach(imgPath => {
@@ -479,11 +479,10 @@ function renderImageWall(images) {
     
     const img = document.createElement('img');
     img.src = `file://${imgPath}`;
-    img.loading = 'lazy'; // Important for performance
+    img.loading = 'lazy';
     
     div.appendChild(img);
     
-    // Click to open Modal
     div.addEventListener('click', () => {
       modalImage.src = `file://${imgPath}`;
       imageModal.classList.add('active');
@@ -521,24 +520,19 @@ function renderPostList(posts) {
       </div>
     `;
 
-    // Click to Open Post Viewer
     row.addEventListener('click', () => openPostViewer(post));
 
     postList.appendChild(row);
   });
 }
 
-// 3. Open Post Viewer (Simple MD Parser)
+// 3. Open Post Viewer
 function openPostViewer(post) {
   viewerTitle.textContent = post.title;
   
   let rawContent = post.content;
   
-  // Replace Markdown Image Syntax with HTML <img> tag using Absolute Path
-  // Pattern: ![alt](filename)
   const htmlContent = rawContent.replace(/!\[(.*?)\]\((.*?)\)/g, (match, alt, filename) => {
-    // Construct full path: post.fullPath + filename
-    // Ensure filename doesn't have path traversal characters
     const cleanFilename = filename.split('/').pop(); 
     const fullImgPath = `${post.fullPath}/${cleanFilename}`;
     return `<img src="file://${fullImgPath}" alt="${alt}">`;
