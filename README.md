@@ -19,6 +19,12 @@ Takaneko Fanclub の投稿・画像・Markdown を保存し、デスクトップ
 - macOS：下載 `.dmg` 後拖曳到 Applications；`.zip` 可解壓縮後使用。
   - macOS：`.dmg` を開いて Applications にコピーします。`.zip` は解凍して使用できます。
 
+### 版本相容性／バージョン互換性
+
+`1.2.0` 及以前的版本使用舊 app 名稱 `Takaneko Downloader`；`1.2.1` 以後改用 `Takaneko Fanclub Downloader`。兩者視為不同 app，安裝新版不會自動取代舊版。若電腦已有舊版，請先手動解除安裝舊 app，再安裝新版。
+
+`1.2.0` 以前のバージョンは旧アプリ名 `Takaneko Downloader`、`1.2.1` 以降は `Takaneko Fanclub Downloader` を使用します。両者は別アプリとして扱われ、新版をインストールしても旧版は自動置換されません。旧版がある場合は、先に旧アプリを手動でアンインストールしてから新版をインストールしてください。
+
 ## 快速使用／クイックスタート
 
 1. 開啟程式，按 Login／ログイン。
