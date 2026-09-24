@@ -30,6 +30,7 @@ def build(source, manifest_path, output, snapshot):
         by_folder.setdefault(str(relative.parent), []).append({**entry, 'name': relative.name})
     stats = {'posts': 0, 'media': 0, 'thumbnails': 0, 'missing_ids': 0, 'duplicate_ids': 0}
     seen = set()
+    canonical_files = []
     with (output / 'catalog.ndjson').open('w', encoding='utf-8') as stream:
         for relative, files in sorted(by_folder.items()):
             names = {f['name']: f for f in files}
@@ -52,8 +53,11 @@ def build(source, manifest_path, output, snapshot):
             title = body.splitlines()[0].removeprefix('# ').strip() if body else relative.split('/')[-1]
             version = hashlib.sha256(''.join(f['name'] + f['sha256'] for f in sorted(files, key=lambda f: f['name'])).encode()).hexdigest()
             identity = hashlib.sha256(key.encode()).hexdigest()
-            nas_folder = f'takaneko/desktop-imports/{snapshot}/{relative}'
-            local_folder = f'complete/desktop-imports/{snapshot}/{identity}'
+            nas_folder = f'takaneko/media/{identity}/{version}'
+            local_folder = f'complete/{identity}/{version}'
+            for entry in files:
+                canonical_files.append({'source_path': relative + '/' + entry['name'], 'path': nas_folder + '/' + entry['name'],
+                                        'size': entry['size'], 'sha256': entry['sha256']})
             try: created_at = datetime.strptime(relative.split('/')[1][:17], '%Y-%m-%d_%H%M%S').replace(tzinfo=timezone(timedelta(hours=9))).isoformat()
             except ValueError: created_at = datetime.now(timezone.utc).isoformat()
             media = []
@@ -74,7 +78,7 @@ def build(source, manifest_path, output, snapshot):
                         thumb_hash = digest(target)
                         media.append({'media_id': hashlib.sha256((media_id + ':thumbnail').encode()).hexdigest(),
                                       'variant': 'thumbnail', 'relative_path': f'complete/desktop-thumbnails/{snapshot}/{target.name}',
-                                      'nas_path': f'takaneko/desktop-thumbnails/{snapshot}/{target.name}',
+                                      'nas_path': f'takaneko/thumbnails/{snapshot}/{target.name}',
                                       'sha256': thumb_hash, 'size': target.stat().st_size, 'mime': 'image/jpeg',
                                       'width': image.width, 'height': image.height, 'original_id': media_id, 'local_available': True})
                         stats['thumbnails'] += 1
@@ -89,7 +93,10 @@ def build(source, manifest_path, output, snapshot):
             stats['posts'] += 1
             stats['media'] += len(media)
             if stats['posts'] % 1000 == 0: print(f"Prepared {stats['posts']} posts", flush=True)
+    canonical_manifest = output / 'media-manifest.json'
+    canonical_manifest.write_text(json.dumps(canonical_files, ensure_ascii=False), encoding='utf-8')
     summary = {**stats, 'snapshot': snapshot, 'source_manifest_sha256': digest(Path(manifest_path)),
+               'media_manifest_sha256': digest(canonical_manifest),
                'catalog_sha256': digest(output / 'catalog.ndjson')}
     (output / 'summary.json').write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary))

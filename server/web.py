@@ -232,7 +232,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 # Refresh availability after an interrupted publication/cleanup.
                 row = query('SELECT * FROM media WHERE media_id=%s', (media_id,), one=True)
-                if not row['nas_available'] or not row['nas_path'].startswith(('takaneko/media/', 'takaneko/desktop-imports/', 'takaneko/desktop-thumbnails/')) or '..' in row['nas_path'].split('/'):
+                if not row['nas_available'] or not row['nas_path'].startswith(('takaneko/media/', 'takaneko/thumbnails/')) or '..' in row['nas_path'].split('/'):
                     return self.respond(503, {'error': '媒體暫時無法讀取，請稍後重試。'}, {'Retry-After': '30'})
                 acquired = NAS_SLOTS.acquire(timeout=10)
                 if not acquired: return self.respond(503, {'error': '讀取忙碌中，請稍後重試。'})

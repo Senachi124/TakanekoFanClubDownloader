@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import threading
 import uuid
@@ -81,22 +82,48 @@ def copy_snapshot(source, destination, report, resume=False, workers=16):
         if digest.hexdigest() != item['sha256'] or (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
             raise ValueError('Source changed during copy; staged data retained')
         os.utime(temporary, ns=(before.st_atime_ns, before.st_mtime_ns))
-        temporary.rename(remote)
+        try:
+            temporary.rename(remote)
+        except FileNotFoundError:
+            # Some SMB servers cannot rename beneath a trailing-dot directory,
+            # even though extended-path open/read succeeds. This is an offline
+            # backup: it is published only by the final verification receipt.
+            if not temporary.is_file(): raise
+            with temporary.open('rb') as src, remote.open('xb') as dst:
+                shutil.copyfileobj(src, dst, 1024 * 1024)
+            os.utime(remote, ns=(before.st_atime_ns, before.st_mtime_ns))
+            if sha(remote) != item['sha256']: raise ValueError('NAS fallback checksum mismatch')
+            temporary.unlink()
         if sha(remote) != item['sha256']: raise ValueError('NAS checksum mismatch')
 
     total = sum(item['size'] for item in manifest)
     print(f'Copying and verifying {len(manifest)} files, {total} bytes', flush=True)
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = [pool.submit(transfer, item) for item in manifest]
-        for count, future in enumerate(as_completed(futures), 1):
-            future.result()
-            if count % 1000 == 0: print(f'NAS verified {count}/{len(manifest)} files', flush=True)
+        try:
+            for count, future in enumerate(as_completed(futures), 1):
+                future.result()
+                if count % 1000 == 0: print(f'NAS verified {count}/{len(manifest)} files', flush=True)
+        except BaseException:
+            for future in futures: future.cancel()
+            print('Backup stopped; completed and temporary files retained', flush=True)
+            raise
     after = {str(file.relative_to(source)) for file in source.rglob('*') if file.is_file()}
     if after != expected: raise ValueError('Source changed during backup')
     for item in manifest:
         stat = (source / item['path']).stat()
         if stat.st_size != item['size'] or stat.st_mtime_ns // 100 + 621355968000000000 != item['mtimeTicks']:
             raise ValueError('Source changed during backup')
+    # Preserve this task's interrupted scratch copies outside the backup tree.
+    interrupted = target.with_name(target.name + '-interrupted')
+    for file in target.rglob('.vm1-desktop-*'):
+        if not file.is_file() or not re.fullmatch(r'\.vm1-desktop-[a-f0-9]{32}', file.name): continue
+        interrupted.mkdir(exist_ok=True)
+        held = interrupted / file.name
+        if held.exists(): raise ValueError('Interrupted diagnostics name conflict')
+        with file.open('rb') as src, held.open('xb') as dst: shutil.copyfileobj(src, dst, 1024 * 1024)
+        if sha(file) != sha(held): raise ValueError('Interrupted diagnostics checksum')
+        file.unlink()
     remote_files = {str(file.relative_to(target)) for file in target.rglob('*') if file.is_file()}
     if remote_files - {'_backup-manifest.json', '_backup-complete.json'} != expected: raise ValueError('Unexpected NAS files')
     shutil.copyfile(manifest_path, target / '_backup-manifest.json')

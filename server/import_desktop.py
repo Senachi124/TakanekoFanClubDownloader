@@ -25,9 +25,10 @@ def run(bundle):
     summary = json.loads((bundle / 'summary.json').read_text())
     snapshot = summary['snapshot']
     if not re.fullmatch('[a-zA-Z0-9_-]+', snapshot): raise ValueError('Snapshot')
-    completion = remote_json(f'takaneko/desktop-imports/{snapshot}/_backup-complete.json')
-    if completion['status'] != 'verified' or completion['sha256Manifest'] != summary['source_manifest_sha256']:
-        raise ValueError('NAS original verification does not match this catalog')
+    completion = remote_json(f'takaneko/import-receipts/{snapshot}.json')
+    if (completion['status'] != 'verified' or completion['source_manifest_sha256'] != summary['source_manifest_sha256']
+            or completion['media_manifest_sha256'] != summary['media_manifest_sha256']):
+        raise ValueError('Canonical NAS media verification does not match this catalog')
     catalog = bundle / 'catalog.ndjson'
     with catalog.open('rb') as file:
         if hashlib.file_digest(file, 'sha256').hexdigest() != summary['catalog_sha256']: raise ValueError('Catalog checksum')
@@ -41,7 +42,7 @@ def run(bundle):
     with db() as conn, catalog.open(encoding='utf-8') as stream:
         for line in stream:
             post = json.loads(line)
-            if not post['nas_folder'].startswith(f'takaneko/desktop-imports/{snapshot}/'): raise ValueError('NAS scope')
+            if not re.fullmatch(r'takaneko/media/[a-f0-9]{64}/[a-f0-9]{64}', post['nas_folder']): raise ValueError('NAS scope')
             inserted = conn.execute('''INSERT INTO posts(resource_key,source_id,kind,title,member,body,folder,nas_folder,version,nas_available,local_available,created_at)
                             VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,true,false,%s) ON CONFLICT DO NOTHING RETURNING resource_key''',
                          tuple(post[k] for k in ('resource_key','source_id','kind','title','member','body','folder','nas_folder','version','created_at'))).fetchone()
@@ -49,7 +50,7 @@ def run(bundle):
             for media in post['media']:
                 if media['variant'] == 'thumbnail':
                     name = Path(media['relative_path']).name
-                    if not re.fullmatch('[a-f0-9]{64}\.jpg', name): raise ValueError('Thumbnail name')
+                    if not re.fullmatch(r'[a-f0-9]{64}\.jpg', name): raise ValueError('Thumbnail name')
                     source = bundle / 'thumbnails' / name
                     with source.open('rb') as file:
                         if hashlib.file_digest(file, 'sha256').hexdigest() != media['sha256']: raise ValueError('Thumbnail local checksum')
@@ -69,7 +70,7 @@ def run(bundle):
         conn.execute('''INSERT INTO desktop_imports(snapshot,files,bytes,posts,manifest_sha256) VALUES(%s,%s,%s,%s,%s)
                         ON CONFLICT(snapshot) DO NOTHING''', (snapshot, completion['files'], completion['bytes'], count, summary['source_manifest_sha256']))
         conn.execute('''INSERT INTO desktop_thumbnail_backups(snapshot,folder,nas_folder) VALUES(%s,%s,%s)
-                        ON CONFLICT DO NOTHING''', (snapshot, str(thumb_root.relative_to(ROOT)), f'takaneko/desktop-thumbnails/{snapshot}'))
+                        ON CONFLICT DO NOTHING''', (snapshot, str(thumb_root.relative_to(ROOT)), f'takaneko/thumbnails/{snapshot}'))
     print(json.dumps({'imported_posts': count, 'snapshot': snapshot, 'originals': 'NAS', 'local_thumbnails': True}))
 
 
