@@ -1,0 +1,8 @@
+[Unit]
+Description=Check Takaneko automatic backup schedule every five minutes
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Unit=takaneko-auto.service
+[Install]
+WantedBy=timers.target

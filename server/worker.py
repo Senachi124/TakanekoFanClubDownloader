@@ -105,7 +105,10 @@ def publish(key, item, result, staging):
 
 def process_item(bridge, token, item, job_id):
     key = f"takaneko:{item['kind']}:{item['id']}:v1"
-    existing = query('SELECT folder FROM posts WHERE resource_key=%s', (key,), one=True)
+    existing = query('SELECT folder,nas_available FROM posts WHERE resource_key=%s', (key,), one=True)
+    if existing and existing.get('nas_available'):
+        # Verified desktop imports already have a NAS copy, without a VM original.
+        return
     with BACKUP_SLOTS:
         decision = backup.claim(SERVICE, key)
     if decision['action'] in ('skip', 'resume_transfer'): return
@@ -154,7 +157,10 @@ def run_job(bridge, job):
     token = get_token()
     items = bridge.call(action='list', token=token, blogs=settings['blogs'])
     items = list({(i['kind'], i['id']): i for i in items}.values())
-    query("UPDATE jobs SET total=%s,message='下載中',updated_at=now() WHERE id=%s", (len(items), job_id))
+    verified = {row['resource_key'] for row in query('SELECT resource_key FROM posts WHERE nas_available')}
+    total = len(items)
+    items = [item for item in items if f"takaneko:{item['kind']}:{item['id']}:v1" not in verified]
+    query("UPDATE jobs SET total=%s,completed=%s,message='下載中',updated_at=now() WHERE id=%s", (total, total-len(items), job_id))
     pending = iter(items)
     active = set()
     cancelled = False
@@ -202,19 +208,55 @@ def transfer():
             query('UPDATE posts SET transfer_error=true WHERE resource_key=%s', (post['resource_key'],))
             print('NAS transfer unavailable; originals retained; scheduled retry pending', flush=True)
             return 1
+    for batch in query('SELECT * FROM desktop_thumbnail_backups WHERE NOT nas_available'):
+        try:
+            backup.send_directory(service=SERVICE, source=ROOT / batch['folder'], destination=batch['nas_folder'],
+                                  resource_key=f"takaneko:desktop-thumbnails:{batch['snapshot']}:v1", delete_source=False)
+            with db() as conn:
+                conn.execute('UPDATE desktop_thumbnail_backups SET nas_available=true,transfer_error=false WHERE snapshot=%s', (batch['snapshot'],))
+                conn.execute("UPDATE media SET nas_available=true,nas_verified_at=now() WHERE variant='thumbnail' AND starts_with(nas_path,%s)", (batch['nas_folder'] + '/',))
+        except Exception:
+            query('UPDATE desktop_thumbnail_backups SET transfer_error=true WHERE snapshot=%s', (batch['snapshot'],))
+            print('Desktop thumbnail backup pending; local thumbnails retained', flush=True)
+            return 1
+    return 0
+
+
+def schedule():
+    """Queue at most one due job; systemd wakes this coordinator every five minutes."""
+    with db() as conn:
+        settings = conn.execute('SELECT *,auto_next_at IS NULL OR auto_next_at<=now() AS due FROM settings WHERE id=1 FOR UPDATE').fetchone()
+        if not settings['auto_enabled']: return 0
+        if not ((CONTROL / 'session.json').exists() or (CONTROL / 'token').exists()):
+            message = '等待匯入 Fanclub 登入資料'
+        elif conn.execute("SELECT 1 FROM jobs WHERE status IN ('queued','running','paused') LIMIT 1").fetchone():
+            message = '已有下載進行中，完成後再檢查'
+        elif conn.execute('SELECT 1 FROM posts WHERE transfer_error UNION ALL SELECT 1 FROM desktop_thumbnail_backups WHERE transfer_error LIMIT 1').fetchone():
+            message = '等待 NAS 備份恢復'
+        elif shutil.disk_usage(ROOT).free < MIN_FREE:
+            message = '磁碟空間不足，暫停自動下載'
+        elif not settings['due']:
+            return 0
+        else:
+            job = conn.execute("INSERT INTO jobs(id,status,message,trigger) VALUES(%s,'queued','自動備份：準備下載','automatic') ON CONFLICT DO NOTHING RETURNING id", (uuid.uuid4().hex,)).fetchone()
+            if job:
+                conn.execute("UPDATE settings SET auto_last_at=now(),auto_next_at=now()+auto_interval_hours*interval '1 hour',auto_message='已安排自動備份' WHERE id=1")
+            return 0
+        conn.execute('UPDATE settings SET auto_message=%s WHERE id=1', (message,))
     return 0
 
 
 def main():
     initialize()
     if '--initialize' in sys.argv: return 0
+    if '--schedule' in sys.argv: return schedule()
     if '--transfer' in sys.argv: return transfer()
     query("UPDATE jobs SET status='failed',message='服務重啟，請重新開始；已完成檔案保留' WHERE status IN ('running','paused')")
     bridge = Bridge()
     while True:
         job = query("SELECT * FROM jobs WHERE status='queued' ORDER BY created_at LIMIT 1", one=True)
         if not job: time.sleep(2); continue
-        if query('SELECT 1 FROM posts WHERE transfer_error LIMIT 1', one=True):
+        if query('SELECT 1 FROM posts WHERE transfer_error UNION ALL SELECT 1 FROM desktop_thumbnail_backups WHERE transfer_error LIMIT 1', one=True):
             query("UPDATE jobs SET status='failed',message='NAS 備份失敗，恢復備份後再開始下載' WHERE id=%s", (job['id'],))
             continue
         query("UPDATE jobs SET status='running',message='取得投稿清單',updated_at=now() WHERE id=%s", (job['id'],))

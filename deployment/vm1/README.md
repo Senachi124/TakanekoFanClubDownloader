@@ -5,6 +5,7 @@ Based on upstream `main` at `f3c7d99` (2026-09-24). Deployment follows VM `/opt/
 ## Access and layout
 
 - Public URL: **https://vm1.learnfromidol.com:2083/**; also registered in the VM1 service directory.
+- Downloads/login/schedules: `/downloads`; private collection: `/browse`. Cookies can be pasted as a `Cookie: name=value; ...` header, JSON, or Netscape text, or uploaded as a file. An optional refreshToken field supports cookies exports missing the official site's localStorage login data.
 - Private HTTP: `127.0.0.1:43130`. Dedicated nginx process; existing nginx, ME LINK and Instagram services are not reconfigured or restarted.
 - Release: `/opt/takaneko/releases/<revision>`; active symlink `/opt/takaneko/current`.
 - Worker: `takanekowork`; reader/web: `takanekoweb`. Only the worker belongs to `vm1-backup`. The web process uses `vm1-media-readers` and has read-only filesystem access to completed originals.
@@ -26,6 +27,18 @@ sudo bash /opt/takaneko/releases/REVISION/deployment/vm1/install.sh
 The installer uses Node 22+ and Ubuntu packages (`npm`, `ffmpeg` already installed on vm1, `yt-dlp`, `python3-pil`, `python3-psycopg`), production-only npm dependencies, isolated service users, the existing domain certificate, UFW port 2083, and the existing portal's documented registration interface. `NEEDRESTART_MODE=l` prevents package installation from restarting unrelated services. Check that ports 2083 and 43130 are free before first installation. Updates restart this application's services only; finish/cancel active downloads first.
 
 Desktop concurrency and web settings accept **1–100**, default **5**. The old 32/50 discrepancy is removed. VM video conversions have a separate two-process queue to fit the host's RAM/CPU. No bandwidth cap is imposed. Authentication throttling is independent from download concurrency.
+
+## Automatic backups
+
+`takaneko-auto.timer` checks every five minutes and queues a download when due. Default: enabled, every six hours. The download page can disable it or choose 1–168 hours. Missing login data, another active download, NAS transfer failure, or less than 5 GiB free space postpones the run; existing work is not interrupted. Schedule state persists in PostgreSQL and prevents duplicate concurrent jobs. The worker skips verified NAS originals before fetching their details. Nightly VM-to-NAS transfer remains a separate timer with its existing Hong Kong overnight window.
+
+## Import an existing desktop collection
+
+`backup_desktop.py` copies to a new `takaneko/desktop-imports/<snapshot>` NAS directory via an existing authenticated SMB session. It preserves unusual/trailing-dot Windows filenames through extended paths, never overwrites different existing data, writes temporary files before publication, and verifies every final NAS file with SHA-256. Source files remain untouched. A source manifest and completion receipt are saved outside Git. `--resume` requires the original manifest and rechecks any existing destination files.
+
+`build-desktop-catalog.py` reads that manifest and prepares an NDJSON catalog plus 480px thumbnails. Transfer only the catalog and thumbnails to VM, then run `sudo python3 server/import_desktop.py BUNDLE_DIRECTORY`. The importer verifies the NAS completion receipt, source manifest identity, thumbnail hashes and catalog hash before committing the catalog. Originals stay on NAS, thumbnails are readable on VM and queued for the nightly helper transfer to `takaneko/desktop-thumbnails/<snapshot>`. Thumbnail NAS availability remains false until that transfer verifies successfully. Existing `.post-id` values become the same resource keys used by the downloader. Posts missing a completion ID are browseable legacy records, without falsely suppressing future downloads of their unknown source IDs. Duplicate IDs are indexed once.
+
+This explicit desktop import uses the user's local SMB access and full SHA-256 verification instead of round-tripping 12 GiB through VM. It records the verification in `desktop_imports`; it never fabricates or modifies helper `resources`/`transfer_runs` records. The ongoing service continues using the shared VM backup helper for newly downloaded content.
 
 ## Storage and backup
 

@@ -1,5 +1,13 @@
 const $ = id => document.getElementById(id);
 let csrf = '', offset = 0, job = null, lastCount = -1;
+const browsing = location.pathname === '/browse';
+$('downloadsPage').hidden = browsing;
+$('browsePage').hidden = !browsing;
+$('settingsToggle').hidden = browsing;
+$('pageTitle').textContent = browsing ? '你的內容庫。' : '下載與備份。';
+$('pageEyebrow').textContent = browsing ? 'TAKANEKO / COLLECTION' : 'TAKANEKO / BACKUP';
+$(browsing ? 'browseLink' : 'downloadsLink').setAttribute('aria-current', 'page');
+document.title = browsing ? '瀏覽內容 · Takaneko' : '下載與備份 · Takaneko';
 async function api(path, data) {
   const response = await fetch(path, data === undefined ? {} : {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: JSON.stringify(data)
@@ -32,8 +40,17 @@ async function refresh() {
   $('jobCount').textContent = job ? `${job.completed} / ${job.total} 篇${job.failed ? ` · ${job.failed} 篇需重試` : ''}` : '尚未開始';
   $('postCount').textContent = data.stats.posts;
   $('backedUp').textContent = data.stats.backed_up;
+  $('browseCount').textContent = `${data.stats.posts} 篇投稿 · ${data.stats.backed_up} 篇已備份至 NAS`;
+  if (!document.activeElement.closest('#autoForm')) {
+    $('autoEnabled').checked = data.settings.auto_enabled;
+    $('autoHours').value = data.settings.auto_interval_hours;
+  }
+  $('autoState').textContent = data.settings.auto_enabled ? '已啟用' : '已停用';
+  $('autoMessage').textContent = data.settings.auto_message;
+  const next = data.settings.auto_next_at;
+  $('autoNext').textContent = data.settings.auto_enabled && next ? `下次檢查：${new Date(next).toLocaleString('zh-HK', { timeZone: 'Asia/Hong_Kong' })}（香港時間）；排程每 5 分鐘確認一次。` : '手動下載仍可隨時使用。';
   if (data.stats.backup_errors) notice('NAS 備份暫時失敗。本機內容已保留，下一個備份時段會重試。');
-  if (lastCount !== data.stats.posts) { lastCount = data.stats.posts; await loadPosts(); }
+  if (browsing && lastCount !== data.stats.posts) { lastCount = data.stats.posts; await loadPosts(); }
 }
 async function loadPosts() {
   const member = $('member').value;
@@ -49,7 +66,7 @@ async function loadPosts() {
     const info = document.createElement('div'); info.className = 'post-info';
     const memberName = document.createElement('small'); memberName.textContent = post.member;
     const title = document.createElement('h3'); title.textContent = post.title;
-    const state = document.createElement('p'); state.textContent = post.nas_available ? 'VM + NAS' : 'VM · 等待備份';
+    const state = document.createElement('p'); state.textContent = post.nas_available ? (post.local_available ? 'VM + NAS' : 'NAS') : 'VM · 等待備份';
     info.append(memberName, title, state); card.append(info); card.addEventListener('click', () => openPost(post.resource_key).catch(e => notice(e.message))); $('posts').append(card);
   }
   $('empty').hidden = !!data.posts.length;
@@ -88,12 +105,21 @@ $('exportCode').textContent = exportCode;
 $('copyExport').addEventListener('click', action(async () => { await navigator.clipboard.writeText(exportCode); notice('匯出指令已複製。請在已登入的 Fanclub 官網 Console 執行。'); }));
 $('importForm').addEventListener('submit', action(async () => {
   const file = $('cookiesFile').files[0];
-  if (!file || file.size > 512 * 1024) throw new Error('請選擇小於 512 KiB 的登入檔案。');
+  const pasted = $('cookiesPaste').value.trim();
+  if (pasted && file) throw new Error('請選擇貼上內容或上傳檔案其中一種。');
+  if ((!pasted && !file) || (file && file.size > 512 * 1024)) throw new Error('請貼上 cookies，或選擇小於 512 KiB 的登入檔案。');
+  const content = pasted || await file.text();
+  if (new TextEncoder().encode(content).length > 512 * 1024) throw new Error('登入資料不可超過 512 KiB。');
   $('importButton').disabled = true; $('importButton').textContent = '正在驗證…';
   try {
-    await api('/api/import-cookies', { content: await file.text() });
-    $('cookiesFile').value = ''; notice('Fanclub 登入驗證成功，現在可以開始下載。'); await refresh();
+    await api('/api/import-cookies', { content, refreshToken: $('refreshToken').value.trim() });
+    $('cookiesFile').value = ''; $('cookiesPaste').value = ''; $('refreshToken').value = '';
+    notice('Fanclub 登入驗證成功，現在可以開始下載。自動備份會依排程執行。'); await refresh();
   } finally { $('importButton').disabled = false; $('importButton').textContent = '匯入並驗證登入'; }
+}));
+$('autoForm').addEventListener('submit', action(async () => {
+  await api('/api/automation', { enabled: $('autoEnabled').checked, intervalHours: Number($('autoHours').value) });
+  notice('自動備份排程已儲存。'); await refresh();
 }));
 $('start').addEventListener('click', action(async () => { await api('/api/start', {}); await refresh(); }));
 $('pause').addEventListener('click', action(async () => { await api('/api/control', { command: job?.command === 'pause' ? 'run' : 'pause' }); await refresh(); }));

@@ -27,7 +27,7 @@ runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d vm1_backup -c 'ALTER ROLE s
 runuser -u takanekowork -g takaneko-read -- env PYTHONDONTWRITEBYTECODE=1 python3 server/worker.py --initialize
 runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d vm1_backup <<'SQL'
 GRANT USAGE ON SCHEMA takaneko TO svc_takaneko_web;
-GRANT SELECT ON takaneko.settings,takaneko.jobs,takaneko.posts,takaneko.media TO svc_takaneko_web;
+GRANT SELECT ON takaneko.settings,takaneko.jobs,takaneko.posts,takaneko.media,takaneko.desktop_thumbnail_backups TO svc_takaneko_web;
 GRANT UPDATE ON takaneko.settings TO svc_takaneko_web;
 GRANT INSERT,UPDATE ON takaneko.jobs TO svc_takaneko_web;
 SQL
@@ -37,9 +37,9 @@ install -m 0644 deployment/vm1/nginx.conf /etc/takaneko/nginx.conf
 install -m 0644 deployment/vm1/*.service deployment/vm1/*.timer /etc/systemd/system/
 nginx -t -c /etc/takaneko/nginx.conf
 systemctl daemon-reload
-systemctl enable takaneko.service takaneko-web.service takaneko-https.service takaneko-nas.timer takaneko-tls-reload.timer
+systemctl enable takaneko.service takaneko-web.service takaneko-https.service takaneko-nas.timer takaneko-auto.timer takaneko-tls-reload.timer
 systemctl restart takaneko.service takaneko-web.service takaneko-https.service
-systemctl start takaneko-nas.timer takaneko-tls-reload.timer
+systemctl start takaneko-nas.timer takaneko-auto.timer takaneko-tls-reload.timer
 ufw allow 2083/tcp comment 'Takaneko Fanclub HTTPS'
 python3 deployment/vm1/register_portal.py
 systemctl is-active takaneko.service takaneko-web.service takaneko-https.service

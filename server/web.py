@@ -66,7 +66,7 @@ def open_local(relative):
 
 
 def public_post(row):
-    return {key: row[key] for key in ('resource_key', 'title', 'member', 'kind', 'created_at', 'nas_available')}
+    return {key: row[key] for key in ('resource_key', 'title', 'member', 'kind', 'created_at', 'nas_available', 'local_available')}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -108,17 +108,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def get(self):
         url = urlsplit(self.path)
-        if url.path in ('/', '/app.js', '/style.css'):
-            name = {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}[url.path]
+        if url.path in ('/', '/downloads', '/browse', '/app.js', '/style.css'):
+            name = {'/': 'index.html', '/downloads': 'index.html', '/browse': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}[url.path]
             mime = {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name]
             return self.respond(200, (PUBLIC / name).read_bytes(), mime=mime)
         if url.path == '/healthz': return self.respond(200, {'ok': True})
         session = self.session()
         if not session: return self.respond(401, {'error': '請先登入。'})
         if url.path == '/api/status':
-            stats = query('SELECT count(*) AS posts,count(*) FILTER(WHERE nas_available) AS backed_up,count(*) FILTER(WHERE transfer_error) AS backup_errors FROM posts', one=True)
+            stats = query('SELECT count(*) AS posts,count(*) FILTER(WHERE nas_available) AS backed_up,count(*) FILTER(WHERE transfer_error)+(SELECT count(*) FROM desktop_thumbnail_backups WHERE transfer_error) AS backup_errors FROM posts', one=True)
             return self.respond(200, {'csrf': session['csrf'], 'hasToken': (CONTROL / 'session.json').exists() or (CONTROL / 'token').exists(),
-                                    'settings': query('SELECT concurrency,blogs FROM settings WHERE id=1', one=True),
+                                    'settings': query('SELECT * FROM settings WHERE id=1', one=True),
                                     'job': query('SELECT * FROM jobs ORDER BY created_at DESC LIMIT 1', one=True), 'stats': stats})
         if url.path == '/api/posts':
             params = parse_qs(url.query)
@@ -167,8 +167,15 @@ class Handler(BaseHTTPRequestHandler):
                 query('UPDATE settings SET concurrency=%s,blogs=%s WHERE id=1', (concurrency, data['blogs']))
                 return self.respond(200, {'ok': True})
             if self.path == '/api/import-cookies':
-                try: save_import(data.get('content'))
+                try: save_import(data.get('content'), data.get('refreshToken'))
                 except ValueError as error: return self.respond(400, {'error': str(error)})
+                return self.respond(200, {'ok': True})
+            if self.path == '/api/automation':
+                enabled = data['enabled']
+                hours = int(data['intervalHours'])
+                if not isinstance(enabled, bool) or not 1 <= hours <= 168: raise ValueError('Schedule')
+                query("UPDATE settings SET auto_enabled=%s,auto_interval_hours=%s,auto_next_at=CASE WHEN %s THEN now() ELSE NULL END,auto_message=%s WHERE id=1",
+                      (enabled, hours, enabled, '等待排程檢查' if enabled else '已停用'))
                 return self.respond(200, {'ok': True})
             if self.path == '/api/start':
                 if not ((CONTROL / 'session.json').exists() or (CONTROL / 'token').exists()): return self.respond(400, {'error': '請先匯入 Fanclub cookies／登入資料。'})
@@ -225,7 +232,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 # Refresh availability after an interrupted publication/cleanup.
                 row = query('SELECT * FROM media WHERE media_id=%s', (media_id,), one=True)
-                if not row['nas_available'] or not row['nas_path'].startswith('takaneko/media/') or '..' in row['nas_path'].split('/'):
+                if not row['nas_available'] or not row['nas_path'].startswith(('takaneko/media/', 'takaneko/desktop-imports/', 'takaneko/desktop-thumbnails/')) or '..' in row['nas_path'].split('/'):
                     return self.respond(503, {'error': '媒體暫時無法讀取，請稍後重試。'}, {'Retry-After': '30'})
                 acquired = NAS_SLOTS.acquire(timeout=10)
                 if not acquired: return self.respond(503, {'error': '讀取忙碌中，請稍後重試。'})

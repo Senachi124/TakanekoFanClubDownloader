@@ -6,6 +6,8 @@
 
 部署設定、帳戶隔離、儲存與維運：[deployment/vm1/README.md](deployment/vm1/README.md)。桌面版功能仍保留。
 
+網頁版分為[下載與自動備份](https://vm1.learnfromidol.com:2083/downloads)及[瀏覽內容](https://vm1.learnfromidol.com:2083/browse)。支援直接貼上 cookies，預設每 6 小時自動下載新內容，可在設定中修改或停用。已驗證匯入 NAS 的桌面版投稿會依原始 ID 跳過重複下載。
+
 Takaneko Fanclub 內容下載器。下載 Takaneko Fanclub 的投稿、圖片與 Markdown，並在桌面應用程式中瀏覽。
 
 Takaneko Fanclub の投稿・画像・Markdown を保存し、デスクトップアプリで閲覧するためのダウンローダーです。

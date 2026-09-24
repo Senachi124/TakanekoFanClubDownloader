@@ -8,6 +8,15 @@ import fanclub_auth as auth
 
 
 class ImportTests(unittest.TestCase):
+    def test_pasted_cookie_header(self):
+        value = auth.parse_import('Cookie: session=abc==; refreshToken=refresh%2Bvalue; preference=1')
+        self.assertEqual(value['refreshToken'], 'refresh+value')
+        self.assertEqual(value['cookies'][0]['value'], 'abc==')
+        self.assertIn('session=abc==', auth.cookie_header(value, '/auth/refresh'))
+
+    def test_pasted_header_rejects_multiple_headers(self):
+        with self.assertRaises(ValueError): auth.parse_import('Cookie: a=b\r\nHost: other.test')
+
     def test_netscape_and_domain_filter(self):
         value = auth.parse_import('# Netscape HTTP Cookie File\n#HttpOnly_.takanekofc.com\tTRUE\t/\tTRUE\t0\trefreshToken\tfixture\n.example.com\tTRUE\t/\tTRUE\t0\tsecret\tdiscard')
         self.assertEqual(value['refreshToken'], 'fixture')

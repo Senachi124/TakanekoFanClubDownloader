@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import shutil
 import sys
+import time
 import uuid
 from PIL import Image
 
@@ -38,6 +39,13 @@ def check(condition, message):
     print('PASS ' + message)
 
 
+for attempt in range(20):
+    try:
+        request('GET', '/healthz', authenticated=False)
+        break
+    except ConnectionRefusedError:
+        if attempt == 19: raise
+        time.sleep(0.25)
 check(request('GET', '/api/status', authenticated=False)[0] == 401, 'unauthenticated catalog denied')
 password = Path('/etc/takaneko/admin-password').read_text().strip()
 status, headers, body = request('POST', '/api/login', {'password': password}, authenticated=False)
@@ -47,6 +55,10 @@ check(all(flag in headers['Set-Cookie'] for flag in ['Secure', 'HttpOnly', 'Same
 csrf = json.loads(body)['csrf']
 check(request('POST', '/api/settings', {'concurrency': 100, 'blogs': True}, {'X-CSRF-Token': 'wrong'})[0] == 403, 'CSRF denied')
 settings = json.loads(request('GET', '/api/status')[2])['settings']
+check(request('GET', '/downloads')[0] == 200 and request('GET', '/browse')[0] == 200, 'separate download and browse routes')
+check(request('POST', '/api/automation', {'enabled': False, 'intervalHours': 12})[0] == 200, 'automatic backup settings saved')
+check(request('POST', '/api/automation', {'enabled': True, 'intervalHours': 0})[0] == 400, 'invalid automatic interval rejected')
+request('POST', '/api/automation', {'enabled': settings['auto_enabled'], 'intervalHours': settings['auto_interval_hours']})
 check(request('POST', '/api/settings', {'concurrency': 100, 'blogs': settings['blogs']})[0] == 200, 'concurrency 100 saved')
 check(json.loads(request('GET', '/api/status')[2])['settings']['concurrency'] == 100, 'concurrency 100 round trip')
 check(request('POST', '/api/settings', {'concurrency': 101, 'blogs': True})[0] == 400, 'concurrency above 100 rejected')

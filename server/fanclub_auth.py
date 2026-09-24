@@ -27,8 +27,17 @@ def parse_import(text):
     cookies, storage = [], {}
     try: value = json.loads(text)
     except ValueError:
+        if '\t' not in text and not text.startswith('#'):
+            # A Cookie request header copied from browser developer tools.
+            raw = re.sub(r'^Cookie\s*:\s*', '', text, flags=re.I)
+            if '\r' in raw or '\n' in raw: raise ValueError('Cookie 標頭必須為單一行；也可貼上 JSON 或 Netscape 格式。')
+            for part in raw.split(';'):
+                if not part.strip(): continue
+                name, separator, val = part.strip().partition('=')
+                if not separator: raise ValueError('請貼上 name=value 格式的 cookies、JSON 或 Netscape 內容。')
+                cookies.append({'domain': '.takanekofc.com', 'path': '/', 'name': name.strip(), 'value': val})
         # Netscape cookies.txt, including HttpOnly records.
-        for line in text.splitlines():
+        for line in text.splitlines() if '\t' in text or text.startswith('#') else []:
             if line.startswith('#HttpOnly_'): line = line[len('#HttpOnly_'):]
             elif line.startswith('#') or not line.strip(): continue
             parts = line.split('\t')
@@ -113,8 +122,12 @@ def authenticate(state):
     return token if token.startswith('Bearer ') else 'Bearer ' + token
 
 
-def save_import(text):
+def save_import(text, refresh_token=None):
     state = parse_import(text)
+    if refresh_token:
+        if not isinstance(refresh_token, str) or len(refresh_token) > 16384 or any(c in refresh_token for c in '\r\n'):
+            raise ValueError('refreshToken 格式不正確。')
+        state['refreshToken'] = refresh_token.strip()
     authenticate(state)  # Invalid files never replace a working login.
     path = CONTROL / ('session-' + secrets.token_hex(8))
     with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o640), 'w') as stream:

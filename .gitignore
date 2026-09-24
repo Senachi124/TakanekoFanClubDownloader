@@ -43,3 +43,4 @@ exported/
 deployment-access.txt
 *.tar.gz
 __pycache__/
+.backup-state/
