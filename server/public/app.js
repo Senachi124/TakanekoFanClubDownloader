@@ -1,13 +1,20 @@
 const $ = id => document.getElementById(id);
-let csrf = '', offset = 0, job = null, lastCount = -1;
-const browsing = location.pathname === '/browse';
+let csrf = '', offset = 0, job = null, lastCount = -1, member = null, requestSerial = 0, mediaItems = [], mediaIndex = 0;
+const multimedia = location.pathname === '/library';
+const browsing = multimedia || location.pathname === '/browse';
 $('downloadsPage').hidden = browsing;
 $('browsePage').hidden = !browsing;
 $('settingsToggle').hidden = browsing;
-$('pageTitle').textContent = browsing ? '你的內容庫。' : '下載與備份。';
-$('pageEyebrow').textContent = browsing ? 'TAKANEKO / COLLECTION' : 'TAKANEKO / BACKUP';
-$(browsing ? 'browseLink' : 'downloadsLink').setAttribute('aria-current', 'page');
-document.title = browsing ? '瀏覽內容 · Takaneko' : '下載與備份 · Takaneko';
+$('pageTitle').textContent = multimedia ? '你的多媒體庫。' : browsing ? '你的內容庫。' : '下載與備份。';
+$('pageEyebrow').textContent = multimedia ? 'TAKANEKO / MEDIA' : browsing ? 'TAKANEKO / COLLECTION' : 'TAKANEKO / BACKUP';
+$(multimedia ? 'libraryLink' : browsing ? 'browseLink' : 'downloadsLink').setAttribute('aria-current', 'page');
+$('mediaFilter').hidden = !multimedia;
+document.title = multimedia ? '多媒體庫 · Takaneko' : browsing ? '瀏覽內容 · Takaneko' : '下載與備份 · Takaneko';
+const initialMember = new URLSearchParams(location.search).get('member');
+if (initialMember) member = initialMember;
+function displayDate(value) {
+  return new Date(value).toLocaleString('zh-HK', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+}
 async function api(path, data) {
   const response = await fetch(path, data === undefined ? {} : {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: JSON.stringify(data)
@@ -18,7 +25,12 @@ async function api(path, data) {
   return result;
 }
 function notice(text) { $('notice').textContent = text; $('notice').hidden = false; }
-function showLogin() { $('login').hidden = false; $('workspace').hidden = true; $('logout').hidden = true; }
+function showLogin() {
+  requestSerial++; lastCount = -1;
+  $('detail').close(); $('mediaDetail').close();
+  $('posts').replaceChildren(); mediaItems = [];
+  $('login').hidden = false; $('workspace').hidden = true; $('logout').hidden = true;
+}
 async function refresh() {
   const data = await api('/api/status');
   csrf = data.csrf;
@@ -40,7 +52,6 @@ async function refresh() {
   $('jobCount').textContent = job ? `${job.completed} / ${job.total} 篇${job.failed ? ` · ${job.failed} 篇需重試` : ''}` : '尚未開始';
   $('postCount').textContent = data.stats.posts;
   $('backedUp').textContent = data.stats.backed_up;
-  $('browseCount').textContent = `${data.stats.posts} 篇投稿 · ${data.stats.backed_up} 篇已備份至 NAS`;
   if (!document.activeElement.closest('#autoForm')) {
     $('autoEnabled').checked = data.settings.auto_enabled;
     $('autoHours').value = data.settings.auto_interval_hours;
@@ -50,32 +61,58 @@ async function refresh() {
   const next = data.settings.auto_next_at;
   $('autoNext').textContent = data.settings.auto_enabled && next ? `下次檢查：${new Date(next).toLocaleString('zh-HK', { timeZone: 'Asia/Hong_Kong' })}（香港時間）；排程每 5 分鐘確認一次。` : '手動下載仍可隨時使用。';
   if (data.stats.backup_errors) notice('NAS 備份暫時失敗。本機內容已保留，下一個備份時段會重試。');
-  if (browsing && lastCount !== data.stats.posts) { lastCount = data.stats.posts; await loadPosts(); }
+  if (browsing && lastCount !== data.stats.posts) { await loadPosts(); lastCount = data.stats.posts; }
 }
 async function loadPosts() {
-  const member = $('member').value;
-  const data = await api(`/api/posts?offset=${offset}&member=${encodeURIComponent(member)}`);
-  $('member').replaceChildren(new Option('全部成員', ''), ...data.members.map(name => new Option(name, name)));
-  $('member').value = member;
+  const serial = ++requestSerial;
+  $('posts').setAttribute('aria-busy', 'true');
+  $('previous').disabled = $('next').disabled = true;
+  let data;
+  try {
+    const params = new URLSearchParams({ offset, type: $('mediaType').value });
+    if (member !== null) params.set('member', member);
+    data = await api(`${multimedia ? '/api/library' : '/api/posts'}?${params}`);
+  } finally { if (serial === requestSerial) $('posts').setAttribute('aria-busy', 'false'); }
+  if (serial !== requestSerial) return;
+  member = data.member;
+  $('memberTabs').replaceChildren(...data.members.map(name => {
+    const tab = document.createElement('button'); tab.type = 'button'; tab.className = 'member-tab'; tab.textContent = name;
+    tab.setAttribute('aria-pressed', String(name === member));
+    tab.addEventListener('click', action(async () => { member = name; offset = 0; await loadPosts(); }));
+    return tab;
+  }));
+  const memberQuery = '?member=' + encodeURIComponent(member);
+  $('browseLink').href = '/browse' + memberQuery; $('libraryLink').href = '/library' + memberQuery;
+  history.replaceState(null, '', location.pathname + memberQuery);
+  $('collectionTitle').textContent = `${member || '成員'} · ${multimedia ? '多媒體庫' : '投稿'}`;
+  $('browseCount').textContent = `${data.total.toLocaleString()} ${multimedia ? '個媒體' : '篇投稿'}`;
   $('posts').replaceChildren();
-  for (const post of data.posts) {
+  const items = multimedia ? data.media : data.posts;
+  // Preserve an open viewer's page while the background catalog refreshes.
+  if (!$('mediaDetail').open) mediaItems = multimedia ? items : [];
+  for (const [index, post] of items.entries()) {
     const card = document.createElement('button'); card.className = 'post';
-    if (post.cover) {
-      const img = document.createElement('img'); img.src = `/media/${post.cover.media_id}`; img.loading = 'lazy'; img.alt = post.title; card.append(img);
-    } else { const mark = document.createElement('div'); mark.className = 'placeholder'; mark.textContent = 'T'; card.append(mark); }
+    const video = multimedia && post.mime.startsWith('video/');
+    if (post.cover_id) {
+      const img = document.createElement('img'); img.src = `/media/${post.cover_id}`; img.loading = 'lazy'; img.alt = post.title; card.append(img);
+    } else { const mark = document.createElement('div'); mark.className = 'placeholder'; mark.textContent = video ? '▶' : multimedia ? '▧' : 'T'; card.append(mark); }
     const info = document.createElement('div'); info.className = 'post-info';
-    const memberName = document.createElement('small'); memberName.textContent = post.member;
+    const memberName = document.createElement('small'); memberName.textContent = multimedia ? `${post.member} · ${video ? '影片' : '圖片'}` : post.member;
     const title = document.createElement('h3'); title.textContent = post.title;
-    const state = document.createElement('p'); state.textContent = post.nas_available ? (post.local_available ? 'VM + NAS' : 'NAS') : 'VM · 等待備份';
-    info.append(memberName, title, state); card.append(info); card.addEventListener('click', () => openPost(post.resource_key).catch(e => notice(e.message))); $('posts').append(card);
+    const date = document.createElement('time'); date.dateTime = post.created_at; date.textContent = displayDate(post.created_at);
+    info.append(memberName, title, date); card.append(info);
+    card.addEventListener('click', action(async () => {
+      if (multimedia) { mediaItems = items; openMedia(index); } else await openPost(post.resource_key);
+    }));
+    $('posts').append(card);
   }
-  $('empty').hidden = !!data.posts.length;
-  $('previous').disabled = offset === 0; $('next').disabled = data.posts.length < 48;
-  $('page').textContent = `第 ${offset / 48 + 1} 頁`;
+  $('empty').hidden = !!items.length;
+  $('previous').disabled = offset === 0; $('next').disabled = !data.hasMore;
+  $('page').textContent = `第 ${offset / 48 + 1} / ${Math.max(1, Math.ceil(data.total / 48))} 頁`;
 }
 async function openPost(key) {
   const post = await api('/api/post?key=' + encodeURIComponent(key));
-  $('detailTitle').textContent = post.title; $('detailMember').textContent = post.member;
+  $('detailTitle').textContent = post.title; $('detailMember').textContent = `${post.member} · ${displayDate(post.created_at)}`;
   // Render upstream text as text, never executable HTML or untrusted Markdown.
   $('detailBody').textContent = post.body.replace(/!\[image\]\([^\n]*\)/g, '').replace(/<video[^>]*>\s*<\/video>/g, '').trim();
   $('detailMedia').replaceChildren();
@@ -87,6 +124,19 @@ async function openPost(key) {
     $('detailMedia').append(element);
   }
   $('detail').showModal();
+}
+function openMedia(index) {
+  mediaIndex = index;
+  const media = mediaItems[index];
+  $('mediaTitle').textContent = media.title; $('mediaMember').textContent = `${media.member} · ${displayDate(media.created_at)}`;
+  const element = document.createElement(media.mime.startsWith('video/') ? 'video' : 'img');
+  element.src = '/media/' + media.media_id;
+  if (element.tagName === 'VIDEO') { element.controls = true; element.preload = 'metadata'; element.playsInline = true; }
+  else element.alt = media.title;
+  element.addEventListener('error', () => notice('媒體暫時無法讀取，請稍後重新開啟。'));
+  $('mediaViewer').replaceChildren(element);
+  $('mediaPrevious').disabled = index === 0; $('mediaNext').disabled = index === mediaItems.length - 1;
+  if (!$('mediaDetail').open) $('mediaDetail').showModal();
 }
 function action(handler) { return async event => { event?.preventDefault(); try { await handler(); } catch (e) { notice(e.message); } }; }
 $('loginForm').addEventListener('submit', async event => {
@@ -124,10 +174,15 @@ $('autoForm').addEventListener('submit', action(async () => {
 $('start').addEventListener('click', action(async () => { await api('/api/start', {}); await refresh(); }));
 $('pause').addEventListener('click', action(async () => { await api('/api/control', { command: job?.command === 'pause' ? 'run' : 'pause' }); await refresh(); }));
 $('cancel').addEventListener('click', action(async () => { await api('/api/control', { command: 'cancel' }); notice('停止安排新下載，進行中的項目完成後結束。'); await refresh(); }));
-$('member').addEventListener('change', action(async () => { offset = 0; await loadPosts(); }));
+$('mediaType').addEventListener('change', action(async () => { offset = 0; await loadPosts(); }));
 $('previous').addEventListener('click', action(async () => { offset = Math.max(0, offset - 48); await loadPosts(); }));
 $('next').addEventListener('click', action(async () => { offset += 48; await loadPosts(); }));
 $('closeDetail').addEventListener('click', () => $('detail').close());
 $('detail').addEventListener('close', () => { $('detailMedia').replaceChildren(); });
+$('closeMedia').addEventListener('click', () => $('mediaDetail').close());
+$('mediaDetail').addEventListener('close', () => $('mediaViewer').replaceChildren());
+$('mediaPrevious').addEventListener('click', () => openMedia(mediaIndex - 1));
+$('mediaNext').addEventListener('click', () => openMedia(mediaIndex + 1));
+$('mediaPost').addEventListener('click', action(async () => { const key = mediaItems[mediaIndex].resource_key; $('mediaDetail').close(); await openPost(key); }));
 refresh().catch(() => {});
 setInterval(() => { if (!$('workspace').hidden) refresh().catch(e => notice(e.message)); }, 4000);

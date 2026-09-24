@@ -1,6 +1,7 @@
 """Authenticated browser UI and read-only local/NAS media streaming."""
 import base64
 from collections import defaultdict
+from datetime import datetime
 import hashlib
 import hmac
 from http.cookies import SimpleCookie
@@ -17,6 +18,7 @@ from urllib.parse import urlsplit, parse_qs
 import uuid
 from common import ROOT, CONTROL, query
 from fanclub_auth import save_import
+from library import collection
 
 sys.path.insert(0, '/opt/vm1-backup')
 from vm1_backup import NAS
@@ -73,7 +75,8 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_): pass  # No credentials, private URLs or upstream errors in access logs.
 
     def respond(self, status, value, extra=None, mime='application/json; charset=utf-8'):
-        body = value if isinstance(value, bytes) else json.dumps(value, ensure_ascii=False, default=str).encode()
+        body = value if isinstance(value, bytes) else json.dumps(value, ensure_ascii=False,
+            default=lambda item: item.isoformat() if isinstance(item, datetime) else str(item)).encode()
         self.send_response(status)
         self.send_header('Content-Type', mime)
         self.send_header('Content-Length', str(len(body)))
@@ -108,8 +111,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def get(self):
         url = urlsplit(self.path)
-        if url.path in ('/', '/downloads', '/browse', '/app.js', '/style.css'):
-            name = {'/': 'index.html', '/downloads': 'index.html', '/browse': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}[url.path]
+        if url.path in ('/', '/downloads', '/browse', '/library', '/app.js', '/style.css'):
+            name = {'/': 'index.html', '/downloads': 'index.html', '/browse': 'index.html', '/library': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}[url.path]
             mime = {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name]
             return self.respond(200, (PUBLIC / name).read_bytes(), mime=mime)
         if url.path == '/healthz': return self.respond(200, {'ok': True})
@@ -120,17 +123,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(200, {'csrf': session['csrf'], 'hasToken': (CONTROL / 'session.json').exists() or (CONTROL / 'token').exists(),
                                     'settings': query('SELECT * FROM settings WHERE id=1', one=True),
                                     'job': query('SELECT * FROM jobs ORDER BY created_at DESC LIMIT 1', one=True), 'stats': stats})
-        if url.path == '/api/posts':
-            params = parse_qs(url.query)
-            offset = max(0, int(params.get('offset', ['0'])[0]))
-            member = params.get('member', [''])[0]
-            rows = query('SELECT * FROM posts WHERE (%s=\'\' OR member=%s) ORDER BY created_at DESC,resource_key LIMIT 48 OFFSET %s', (member, member, offset))
-            result = []
-            for row in rows:
-                post = public_post(row)
-                post['cover'] = query("SELECT media_id,original_id FROM media WHERE resource_key=%s AND variant='thumbnail' ORDER BY relative_path LIMIT 1", (row['resource_key'],), one=True)
-                result.append(post)
-            return self.respond(200, {'posts': result, 'members': [r['member'] for r in query('SELECT DISTINCT member FROM posts ORDER BY member')]})
+        if url.path in ('/api/posts', '/api/library'):
+            try: result = collection(parse_qs(url.query), multimedia=url.path == '/api/library')
+            except ValueError: return self.respond(400, {'error': '請檢查頁碼與媒體類型。'})
+            return self.respond(200, result)
         if url.path == '/api/post':
             key = parse_qs(url.query).get('key', [''])[0]
             row = query('SELECT * FROM posts WHERE resource_key=%s', (key,), one=True)

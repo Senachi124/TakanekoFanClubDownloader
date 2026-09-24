@@ -75,4 +75,6 @@ def initialize():
           nas_verified_at timestamptz, original_id text,
           UNIQUE(resource_key,relative_path,variant));
         ALTER TABLE media ALTER COLUMN local_verified_at DROP NOT NULL;
+        CREATE INDEX IF NOT EXISTS posts_member_date ON posts(member,created_at DESC,resource_key);
+        CREATE INDEX IF NOT EXISTS media_thumbnail_original ON media(original_id) WHERE variant='thumbnail';
         ''')

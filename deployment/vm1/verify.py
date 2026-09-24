@@ -71,12 +71,14 @@ staging.mkdir()
 folder = staging / 'fixture'
 folder.mkdir()
 Image.new('RGB', (32, 24), '#698254').save(folder / 'sample.png')
-(folder / 'index.md').write_text('# Integration fixture\nNo private content.\n')
+(folder / 'index.md').write_text('# Integration fixture\n**Date**: 2020-1-2 0:04:05\nNo private content.\n')
 (folder / '.post-id').write_text(identity)
 published = None
 try:
     decision = backup.claim('takaneko', key)
     published = publish(key, {'id': identity, 'kind': 'test'}, {'folder': str(folder), 'title': 'Integration fixture', 'member': 'Self-test'}, staging)
+    post_date = query('SELECT created_at FROM posts WHERE resource_key=%s', (key,), one=True)['created_at']
+    check(int(post_date.timestamp()) == 1577891045, 'publication stores original Japan date rather than download time')
     # The test runs as root, but completed files must match production reader permissions.
     gid = ROOT.stat().st_gid
     for path in [published.parent, published, *published.iterdir()]: os.chown(path, -1, gid)

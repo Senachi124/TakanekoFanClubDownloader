@@ -14,6 +14,7 @@ import uuid
 from PIL import Image, ImageOps
 from common import ROOT, CONTROL, db, query, initialize
 from fanclub_auth import get_token
+from post_dates import publication_date
 
 sys.path.insert(0, '/opt/vm1-backup')
 import vm1_backup as backup
@@ -84,9 +85,9 @@ def publish(key, item, result, staging):
     nas_folder = f'takaneko/media/{identity}/{version}'
     body = (destination / 'index.md').read_text()
     with db() as conn:
-        conn.execute('''INSERT INTO posts(resource_key,source_id,kind,title,member,body,folder,nas_folder,version)
-                        VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(resource_key) DO NOTHING''',
-                     (key, item['id'], item['kind'], result['title'], result['member'], body, str(relative), nas_folder, version))
+        conn.execute('''INSERT INTO posts(resource_key,source_id,kind,title,member,body,folder,nas_folder,version,created_at)
+                        VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,COALESCE(%s,now())) ON CONFLICT(resource_key) DO NOTHING''',
+                     (key, item['id'], item['kind'], result['title'], result['member'], body, str(relative), nas_folder, version, publication_date(body)))
         for file in destination.iterdir():
             mime = mimetypes.guess_type(file.name)[0] or 'application/octet-stream'
             if not mime.startswith(('image/', 'video/')) or mime == 'image/svg+xml': continue
