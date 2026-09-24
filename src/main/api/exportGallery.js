@@ -1,4 +1,5 @@
 const { net } = require('electron');
+const { downloadToFile } = require('./downloadToFile');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
@@ -48,28 +49,10 @@ function fetchJson(url, token) {
   });
 }
 
-function downloadBinary(url) {
-  return new Promise((resolve, reject) => {
-    const request = net.request({
-      url,
-      method: 'GET'
-    });
-    request.setHeader('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36');
-    request.setHeader('Referer', 'https://takanekofc.com/');
-
-    const chunks = [];
-    request.on('response', (response) => {
-      if (response.statusCode !== 200) {
-        reject(new Error(`HTTP ${response.statusCode} while downloading ${url}`));
-        return;
-      }
-      response.on('data', chunk => chunks.push(chunk));
-      response.on('end', () => resolve(Buffer.concat(chunks)));
-    });
-    request.on('error', reject);
-    request.end();
-  });
-}
+const IMAGE_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+  Referer: 'https://takanekofc.com/'
+};
 
 async function handleBackupGallery(token, rootExportPath, state, onProgress) {
   const galleryDir = path.join(rootExportPath, 'GALLERY');
@@ -121,8 +104,7 @@ async function handleBackupGallery(token, rootExportPath, state, onProgress) {
         const localThumb = path.join(albumFolder, 'cover.jpg');
         if (!fsSync.existsSync(localThumb)) {
           try {
-            const buf = await downloadBinary(thumbUrl);
-            await fs.writeFile(localThumb, buf);
+            await downloadToFile(thumbUrl, localThumb, IMAGE_HEADERS);
           } catch (e) {
             console.warn(`[Gallery Backup] Failed to download cover for ${safeTitle}:`, e.message);
           }
@@ -148,8 +130,7 @@ async function handleBackupGallery(token, rootExportPath, state, onProgress) {
 
         if (!fsSync.existsSync(localPhotoPath)) {
           try {
-            const buf = await downloadBinary(photoUrl);
-            await fs.writeFile(localPhotoPath, buf);
+            await downloadToFile(photoUrl, localPhotoPath, IMAGE_HEADERS);
           } catch (e) {
             console.warn(`[Gallery Backup] Failed photo ${filename}:`, e.message);
           }

@@ -1,4 +1,4 @@
-const { net } = require('electron');
+const { downloadToFile } = require('./downloadToFile');
 const cheerio = require('cheerio');
 const fs = require('fs').promises;
 const fsSync = require('fs');
@@ -97,23 +97,6 @@ function htmlToMarkdown(htmlContent) {
   let text = '';
   $('p').each((_, p) => text += $(p).text().trim() + '\n\n');
   return { text: decodeHtmlEntities(text.trim()), images, vimeoIds };
-}
-
-function downloadBinary(url) {
-  return new Promise((resolve, reject) => {
-    const request = net.request(url);
-    const chunks = [];
-    request.on('response', (response) => {
-      if (response.statusCode !== 200) {
-        reject(new Error(`HTTP ${response.statusCode}`));
-        return;
-      }
-      response.on('data', chunk => chunks.push(chunk));
-      response.on('end', () => resolve(Buffer.concat(chunks)));
-    });
-    request.on('error', reject);
-    request.end();
-  });
 }
 
 /**
@@ -290,9 +273,8 @@ async function processSinglePost(data, rootPath) {
 
     if (!fsSync.existsSync(localPath)) {
       try {
-        const buffer = await downloadBinary(url);
-        await fs.writeFile(localPath, buffer);
-        await fs.writeFile(galleryPath, buffer);
+        await downloadToFile(url, localPath);
+        await fs.copyFile(localPath, galleryPath);
       } catch (e) {
         hasDownloadFailure = true;
         console.warn(`[Step 3] Failed to download image for ${title}: ${e.message}`);
