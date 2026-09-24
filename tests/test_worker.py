@@ -10,6 +10,25 @@ import worker
 
 
 class WorkerTests(unittest.TestCase):
+    def test_active_job_does_not_start_more_downloads_after_nas_failure(self):
+        commands = iter(['run', 'cancel'])
+        updates = []
+        def query(sql, params=(), one=False):
+            if sql.startswith('SELECT * FROM settings'): return {'concurrency':1,'blogs':False}
+            if sql.startswith('SELECT resource_key'): return []
+            if sql.startswith('SELECT command'): return {'command':next(commands)}
+            if sql.startswith('SELECT 1 FROM posts'): return {'failed':1}
+            if sql.startswith('SELECT failed'): return {'failed':0}
+            updates.append(params)
+        bridge = MagicMock()
+        bridge.call.return_value = [{'kind':'post','id':'new'}]
+        with patch.object(worker,'query',side_effect=query), patch.object(worker,'get_token',return_value='fixture'), \
+             patch.object(worker,'process_item') as download, patch.object(worker.time,'sleep'), \
+             patch.object(worker.shutil,'disk_usage',return_value=MagicMock(free=10**12)):
+            worker.run_job(bridge,{'id':'job'})
+        download.assert_not_called()
+        self.assertTrue(any(values and values[0]=='paused' and 'NAS' in values[1] for values in updates))
+
     def test_imported_nas_post_does_not_download_or_claim(self):
         bridge = MagicMock()
         with patch.object(worker, 'query', return_value={'folder': 'unused', 'nas_available': True}), patch.object(worker.backup, 'claim') as claim:

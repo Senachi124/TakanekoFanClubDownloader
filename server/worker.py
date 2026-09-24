@@ -170,9 +170,10 @@ def run_job(bridge, job):
             command = query('SELECT command FROM jobs WHERE id=%s', (job_id,), one=True)['command']
             cancelled = command == 'cancel'
             low_disk = shutil.disk_usage(ROOT).free < MIN_FREE
-            paused = command == 'pause' or low_disk
+            nas_failed = bool(query('SELECT 1 FROM posts WHERE transfer_error UNION ALL SELECT 1 FROM desktop_thumbnail_backups WHERE transfer_error LIMIT 1', one=True))
+            paused = command == 'pause' or low_disk or nas_failed
             query('UPDATE jobs SET status=%s,message=%s,updated_at=now() WHERE id=%s',
-                  ('paused' if paused else 'running', '磁碟空間不足，已暫停' if low_disk else ('已暫停；等待進行中的項目完成' if paused else '下載中'), job_id))
+                  ('paused' if paused else 'running', '磁碟空間不足，已暫停' if low_disk else ('NAS 備份失敗，等待恢復' if nas_failed else ('已暫停；等待進行中的項目完成' if paused else '下載中')), job_id))
             if cancelled: exhausted = True
             while not exhausted and not paused and len(active) < settings['concurrency']:
                 item = next(pending, None)
