@@ -1,0 +1,15 @@
+[Unit]
+Description=Takaneko dedicated HTTPS listener (2083)
+After=network.target takaneko-web.service
+[Service]
+ExecStartPre=/usr/sbin/nginx -t -c /etc/takaneko/nginx.conf
+ExecStart=/usr/sbin/nginx -c /etc/takaneko/nginx.conf -g "daemon off;"
+ExecReload=/bin/kill -HUP $MAINPID
+KillSignal=SIGQUIT
+Restart=on-failure
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+NoNewPrivileges=true
+[Install]
+WantedBy=multi-user.target

@@ -38,3 +38,8 @@ exported/
 # Environment
 .env
 .env.local
+
+# Private deployment handoff and generated release archives
+deployment-access.txt
+*.tar.gz
+__pycache__/

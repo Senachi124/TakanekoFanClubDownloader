@@ -1,0 +1,7 @@
+[Unit]
+Description=Daily Takaneko certificate reload
+[Timer]
+OnCalendar=*-*-* 06:15:00 Asia/Hong_Kong
+Persistent=true
+[Install]
+WantedBy=timers.target

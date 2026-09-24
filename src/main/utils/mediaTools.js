@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { app } = require('electron');
+const app = process.versions.electron ? require('electron').app : { isPackaged: false };
 
 function getWindowsToolsDir() {
   if (process.platform !== 'win32') return null;

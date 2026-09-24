@@ -1,0 +1,26 @@
+[Unit]
+Description=Takaneko authenticated web and read-only media
+After=network-online.target postgresql.service
+[Service]
+User=takanekoweb
+Group=takaneko-control
+SupplementaryGroups=takanekoweb takaneko-read vm1-media-readers
+WorkingDirectory=/opt/takaneko/current
+ExecStart=/usr/bin/python3 /opt/takaneko/current/server/web.py
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=TAKANEKO_DB_CONFIG=/etc/vm1-backup/services/takaneko_web.json
+Environment=TAKANEKO_ORIGIN=https://vm1.learnfromidol.com:2083
+Restart=on-failure
+RestartSec=5
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/takaneko-control
+InaccessiblePaths=/etc/vm1-backup/nas.json /etc/vm1-backup/services/takaneko.json /var/lib/takaneko/staging
+MemoryMax=384M
+TasksMax=96
+LimitNOFILE=512
+[Install]
+WantedBy=multi-user.target

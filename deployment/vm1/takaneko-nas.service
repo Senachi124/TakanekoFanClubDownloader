@@ -1,0 +1,18 @@
+[Unit]
+Description=Takaneko immutable media NAS transfer
+After=network-online.target postgresql.service
+[Service]
+Type=oneshot
+User=takanekowork
+Group=takaneko-read
+SupplementaryGroups=vm1-backup
+WorkingDirectory=/opt/takaneko/current
+ExecStart=/usr/bin/python3 /opt/takaneko/current/server/worker.py --transfer
+Environment=PYTHONDONTWRITEBYTECODE=1
+UMask=0027
+TimeoutStartSec=0
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+MemoryMax=384M

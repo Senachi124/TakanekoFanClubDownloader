@@ -1,5 +1,5 @@
 // src/main/api/getAllPosts.js
-const { net } = require('electron');
+const net = require('../utils/network');
 
 function httpGet(url, headers = {}) {
   return new Promise((resolve, reject) => {

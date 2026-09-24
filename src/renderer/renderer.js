@@ -10,8 +10,7 @@ const progressMessage = document.getElementById('progressMessage');
 const downloadConcurrencyInput = document.getElementById('downloadConcurrencyInput');
 const backupBlogsInput = document.getElementById('backupBlogsInput');
 
-const DEFAULT_DOWNLOAD_CONCURRENCY = 5;
-const MAX_DOWNLOAD_CONCURRENCY = 50;
+const { DEFAULT_CONCURRENCY: DEFAULT_DOWNLOAD_CONCURRENCY, normalizeConcurrency: normalizeDownloadConcurrency } = require('../main/utils/concurrency');
 
 // Export Control Buttons
 const startExportBtn = document.getElementById('startExportBtn');
@@ -65,12 +64,6 @@ async function loadAppInfo() {
 
   const info = await ipcRenderer.invoke('get-app-info');
   appName.textContent = `${info.name} v${info.version}`;
-}
-
-function normalizeDownloadConcurrency(value) {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed)) return DEFAULT_DOWNLOAD_CONCURRENCY;
-  return Math.min(Math.max(parsed, 1), MAX_DOWNLOAD_CONCURRENCY);
 }
 
 async function loadDownloadSettings() {

@@ -1,11 +1,12 @@
 // src/main/api/exportBlogs.js
-const { net } = require('electron');
+const net = require('../utils/network');
 const cheerio = require('cheerio');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { getYtDlpConfig } = require('../utils/mediaTools');
+const { withVideoSlot } = require('../utils/videoQueue');
 
 const POST_ID_FILENAME = '.post-id';
 
@@ -58,6 +59,10 @@ function downloadBinary(url, headers = {}) {
  * Download Vimeo videos using yt-dlp with H.265 (HEVC) preference
  */
 function downloadWithYtDlp(vimeoId, destPath) {
+  return withVideoSlot(() => performVideoDownload(vimeoId, destPath));
+}
+
+function performVideoDownload(vimeoId, destPath) {
   return new Promise((resolve, reject) => {
     const videoUrl = `https://player.vimeo.com/video/${vimeoId}`;
 
@@ -71,6 +76,7 @@ function downloadWithYtDlp(vimeoId, destPath) {
     const args = [
       '--referer', 'https://takanekofc.com/',
       '--concurrent-fragments', '5',
+      '--socket-timeout', '30', '--retries', '3',
       // Prioritize native H.265/HEVC stream if available, otherwise best quality
       '-f', 'bv*[vcodec^=hev]+ba/bv*[vcodec^=h265]+ba/bv*+ba/b',
       '--recode-video', 'mp4',
@@ -81,7 +87,7 @@ function downloadWithYtDlp(vimeoId, destPath) {
     if (ffmpegLocation) args.unshift('--ffmpeg-location', ffmpegLocation);
 
     console.log(`[yt-dlp] Starting download (H.265 mode): ${videoUrl}`);
-    const proc = spawn(command, args);
+    const proc = spawn(command, args, { timeout: 3600000 });
 
     proc.stdout.on('data', (data) => {
       const msg = data.toString().trim();
@@ -164,7 +170,7 @@ function parseBlogBody(htmlContent) {
 /**
  * Main export handler: Back up Manager Blogs (text, images, and H.265 videos)
  */
-async function handleBackupTopicsBlogs(token, rootPath, state, onProgress) {
+async function handleBackupTopicsBlogs(token, rootPath, state, onProgress, selectedArticle = null) {
   const headers = { Authorization: token };
   const senderName = 'マネージャーブログ';
   const senderDir = path.join(rootPath, senderName);
@@ -189,11 +195,11 @@ async function handleBackupTopicsBlogs(token, rootPath, state, onProgress) {
   // 2. Fetch all paginated articles
   let currentPage = 1;
   let totalPages = 1;
-  const allArticles = [];
+  const allArticles = selectedArticle ? [selectedArticle] : [];
 
   console.log('[Blog Backup] Fetching Manager Blog list...');
 
-  while (currentPage <= totalPages) {
+  while (!selectedArticle && currentPage <= totalPages) {
     if (state && state.isCancelled) throw new Error('Process cancelled by user');
 
     const listUrl = `https://api.takanekofc.com/blog/queries/getArticleList?blogId=topics&page=${currentPage}&categories=nuzufcwpxr5s3iip`;
@@ -222,6 +228,7 @@ async function handleBackupTopicsBlogs(token, rootPath, state, onProgress) {
     try {
       detail = await httpGet(`https://api.takanekofc.com/blog/queries/getArticleDetail/${articleId}`, headers);
     } catch (err) {
+      if (selectedArticle) throw new Error('Blog detail request failed');
       console.warn(`[Blog Backup] Failed to fetch article details (${articleId}): ${err.message}`);
       continue;
     }
@@ -303,6 +310,8 @@ async function handleBackupTopicsBlogs(token, rootPath, state, onProgress) {
       `---\n\n${bodyMd}\n\n${videoMd}\n\n---\n\n${imageMd}`;
 
     await fs.writeFile(path.join(postDir, 'index.md'), mdContent, 'utf-8');
+
+    if (selectedArticle && hasDownloadError) throw new Error('One or more blog media downloads failed');
 
     // Only write .post-id marker if all files were downloaded successfully
     if (!hasDownloadError) {

@@ -1,9 +1,8 @@
-const { net } = require('electron');
+const net = require('../utils/network');
 const fs = require('fs').promises;
 const path = require('path');
 
-const DEFAULT_CONCURRENCY = 5;
-const MAX_CONCURRENCY = 32;
+const { DEFAULT_CONCURRENCY, MAX_CONCURRENCY, normalizeConcurrency } = require('../utils/concurrency');
 const POST_ID_FILENAME = '.post-id';
 const DEFAULT_SYSTEM_USER_ID = '6lToHXxrSpkyDT9jmPUOE'; // たかねこファンクラブ運営
 
@@ -64,12 +63,6 @@ function makeRequest(url, headers) {
 
     request.end();
   });
-}
-
-function normalizeConcurrency(value) {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed)) return DEFAULT_CONCURRENCY;
-  return Math.min(Math.max(parsed, 1), MAX_CONCURRENCY);
 }
 
 async function collectPostFolders(exportedPath) {

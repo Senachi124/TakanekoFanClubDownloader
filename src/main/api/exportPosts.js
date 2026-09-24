@@ -1,13 +1,13 @@
-const { net } = require('electron');
+const net = require('../utils/network');
 const cheerio = require('cheerio');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { getYtDlpConfig } = require('../utils/mediaTools');
+const { withVideoSlot } = require('../utils/videoQueue');
 
-const DEFAULT_CONCURRENCY = 5;
-const MAX_CONCURRENCY = 32;
+const { DEFAULT_CONCURRENCY, normalizeConcurrency } = require('../utils/concurrency');
 const POST_ID_FILENAME = '.post-id';
 
 // User ID Mapping
@@ -121,6 +121,10 @@ function downloadBinary(url) {
  * Download Vimeo videos using yt-dlp with H.265 (HEVC) hardware encoding
  */
 function downloadWithYtDlp(vimeoId, destPath) {
+  return withVideoSlot(() => performVideoDownload(vimeoId, destPath));
+}
+
+function performVideoDownload(vimeoId, destPath) {
   return new Promise((resolve, reject) => {
     const videoUrl = `https://player.vimeo.com/video/${vimeoId}`;
 
@@ -133,6 +137,7 @@ function downloadWithYtDlp(vimeoId, destPath) {
     const args = [
       '--referer', 'https://takanekofc.com/',
       '--concurrent-fragments', '5',
+      '--socket-timeout', '30', '--retries', '3',
       '-f', 'bv*[vcodec^=hev]+ba/bv*[vcodec^=h265]+ba/bv*+ba/b',
       '--recode-video', 'mp4',
       '--postprocessor-args', videoCodecArgs,
@@ -142,7 +147,7 @@ function downloadWithYtDlp(vimeoId, destPath) {
     if (ffmpegLocation) args.unshift('--ffmpeg-location', ffmpegLocation);
 
     console.log(`[yt-dlp] Starting video download (H.265 mode): ${videoUrl}`);
-    const proc = spawn(command, args);
+    const proc = spawn(command, args, { timeout: 3600000 });
 
     proc.stdout.on('data', (data) => {
       const msg = data.toString().trim();
@@ -172,12 +177,6 @@ function downloadWithYtDlp(vimeoId, destPath) {
       }
     });
   });
-}
-
-function normalizeConcurrency(value) {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed)) return DEFAULT_CONCURRENCY;
-  return Math.min(Math.max(parsed, 1), MAX_CONCURRENCY);
 }
 
 /**
@@ -221,7 +220,7 @@ async function handleExportPosts(postDetails, exportedPath, state, onProgress, c
 /**
  * Process a single post: Write MD, download images, and fetch embedded H.265 videos
  */
-async function processSinglePost(data, rootPath) {
+async function processSinglePost(data, rootPath, strict = false) {
   const rawTitle = data.title || data.subject || (data.message ? data.message.slice(0, 20) : 'untitled');
 
   // Determine sender: Map ID -> infer from content -> fallback to management
@@ -343,6 +342,8 @@ async function processSinglePost(data, rootPath) {
 
   await fs.writeFile(path.join(postDir, 'index.md'), mdContent, 'utf-8');
 
+  if (strict && hasDownloadFailure) throw new Error('One or more media downloads failed');
+
   if (data.notificationReservationId && !hasDownloadFailure) {
     await fs.writeFile(
       path.join(postDir, POST_ID_FILENAME),
@@ -352,4 +353,4 @@ async function processSinglePost(data, rootPath) {
   }
 }
 
-module.exports = { handleExportPosts };
+module.exports = { handleExportPosts, processSinglePost };

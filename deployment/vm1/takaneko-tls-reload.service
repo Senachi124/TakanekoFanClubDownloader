@@ -1,0 +1,5 @@
+[Unit]
+Description=Reload Takaneko renewed HTTPS certificate
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl reload takaneko-https.service

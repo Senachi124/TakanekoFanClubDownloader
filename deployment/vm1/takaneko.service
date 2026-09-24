@@ -1,0 +1,28 @@
+[Unit]
+Description=Takaneko Fanclub download worker
+After=network-online.target postgresql.service
+Wants=network-online.target
+[Service]
+User=takanekowork
+Group=takaneko-read
+SupplementaryGroups=vm1-backup takaneko-control
+WorkingDirectory=/opt/takaneko/current
+ExecStart=/usr/bin/python3 /opt/takaneko/current/server/worker.py
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=TZ=Asia/Tokyo
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
+KillMode=control-group
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/takaneko
+MemoryMax=1536M
+CPUQuota=150%
+TasksMax=256
+LimitNOFILE=1024
+[Install]
+WantedBy=multi-user.target
