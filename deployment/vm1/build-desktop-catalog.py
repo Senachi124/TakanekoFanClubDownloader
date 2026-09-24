@@ -14,6 +14,25 @@ def digest(path):
     with path.open('rb') as f: return hashlib.file_digest(f, 'sha256').hexdigest()
 
 
+def preserve_unmatched_files(entries, canonical_files, stats, snapshot):
+    paths = {entry['source_path'] for entry in canonical_files}
+    content = {(entry['size'], entry['sha256']) for entry in canonical_files}
+    extra = [entry for entry in entries if entry['path'].replace('\\', '/') not in paths and (entry['size'], entry['sha256']) not in content]
+    if not extra: return
+    source_id = hashlib.sha256((snapshot + ':unmatched').encode()).hexdigest()
+    key = f'takaneko:legacy:{source_id}:v1'
+    identity = hashlib.sha256(key.encode()).hexdigest()
+    version = hashlib.sha256(json.dumps(extra, sort_keys=True).encode()).hexdigest()
+    nas_folder = f'takaneko/media/{identity}/{version}'
+    for entry in extra:
+        relative = entry['path'].replace('\\', '/')
+        name = hashlib.sha256(relative.encode()).hexdigest()[:16] + '-' + PurePosixPath(relative).name
+        canonical_files.append({'source_path': relative, 'path': nas_folder + '/' + name, 'size': entry['size'], 'sha256': entry['sha256']})
+    # Preserve bytes during a move, but do not invent a post or a download marker.
+    # The VM downloader may fetch their actual source posts normally later.
+    stats['unmatched_files'] = len(extra)
+
+
 def build(source, manifest_path, output, snapshot):
     if not re.fullmatch('[a-zA-Z0-9_-]+', snapshot): raise ValueError('Unsafe snapshot name')
     source = Path(source)
@@ -93,6 +112,7 @@ def build(source, manifest_path, output, snapshot):
             stats['posts'] += 1
             stats['media'] += len(media)
             if stats['posts'] % 1000 == 0: print(f"Prepared {stats['posts']} posts", flush=True)
+        preserve_unmatched_files(entries, canonical_files, stats, snapshot)
     canonical_manifest = output / 'media-manifest.json'
     canonical_manifest.write_text(json.dumps(canonical_files, ensure_ascii=False), encoding='utf-8')
     summary = {**stats, 'snapshot': snapshot, 'source_manifest_sha256': digest(Path(manifest_path)),

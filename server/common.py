@@ -71,7 +71,8 @@ def initialize():
           nas_path text NOT NULL, sha256 text NOT NULL, size bigint NOT NULL, mime text NOT NULL,
           width integer, height integer, owner_id text NOT NULL DEFAULT 'owner',
           permission text NOT NULL DEFAULT 'private', local_available boolean NOT NULL DEFAULT true,
-          nas_available boolean NOT NULL DEFAULT false, local_verified_at timestamptz NOT NULL DEFAULT now(),
+          nas_available boolean NOT NULL DEFAULT false, local_verified_at timestamptz DEFAULT now(),
           nas_verified_at timestamptz, original_id text,
           UNIQUE(resource_key,relative_path,variant));
+        ALTER TABLE media ALTER COLUMN local_verified_at DROP NOT NULL;
         ''')

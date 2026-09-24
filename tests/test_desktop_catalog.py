@@ -12,6 +12,19 @@ spec.loader.exec_module(catalog)
 
 
 class DesktopCatalogTests(unittest.TestCase):
+    def test_unmatched_files_do_not_create_posts_or_download_markers(self):
+        files = [{'source_path':'Member/Post/image.jpg','path':'takaneko/media/id/version/image.jpg','size':3,'sha256':'same'}]
+        entries = [{'path':'Member/pictures/image.jpg','size':3,'sha256':'same'},
+                   {'path':'Member/pictures/extra.mp4','size':7,'sha256':'unique'},
+                   {'path':'Member/pictures/empty.jpeg','size':0,'sha256':'empty'}]
+        stats={'posts':1,'media':1,'missing_ids':0}
+        catalog.preserve_unmatched_files(entries,files,stats,'fixture')
+        self.assertEqual(stats['posts'],1)
+        self.assertEqual(stats['media'],1)
+        self.assertEqual(stats['missing_ids'],0)
+        self.assertEqual(len(files),3)
+        self.assertEqual(stats['unmatched_files'],2)
+
     def test_import_preserves_ids_and_nas_paths_and_builds_small_thumbnails(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
