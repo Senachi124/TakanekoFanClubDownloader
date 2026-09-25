@@ -15,6 +15,7 @@ from PIL import Image, ImageOps
 from common import ROOT, CONTROL, db, query, initialize
 from fanclub_auth import get_token
 from post_dates import publication_date
+from archive_layout import readable_folder, safe_path, refresh_record, refresh_catalog
 
 sys.path.insert(0, '/opt/vm1-backup')
 import vm1_backup as backup
@@ -74,15 +75,20 @@ def publish(key, item, result, staging):
                 image.thumbnail((480, 480))
                 image.convert('RGB').save(folder / (file.name + '.thumb.jpg'), quality=82)
     version = hashlib.sha256(''.join(p.name + digest_file(p) for p in sorted(folder.iterdir()) if p.is_file()).encode()).hexdigest()
-    identity = hashlib.sha256(key.encode()).hexdigest()
-    relative = Path('complete') / identity / version
-    destination = ROOT / relative
+    body = (folder / 'index.md').read_text()
+    relative = readable_folder({'resource_key':key, 'kind':item['kind'], 'title':result['title'],
+                                'member':result['member'], 'body':body, 'version':version})
+    destination = safe_path(relative)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        if any(file.is_symlink() or not file.is_file() for file in destination.iterdir()): raise ValueError('Invalid existing publication')
+        existing_version = hashlib.sha256(''.join(p.name + digest_file(p) for p in sorted(destination.iterdir())).encode()).hexdigest()
+        if existing_version != version: raise ValueError('Publication path collision')
     if not destination.exists():
         for file in folder.iterdir(): file.chmod(0o640)
         folder.chmod(0o750)
         folder.rename(destination)
-    nas_folder = f'takaneko/media/{identity}/{version}'
+    nas_folder = 'takaneko/media/' + relative.relative_to('complete').as_posix()
     body = (destination / 'index.md').read_text()
     with db() as conn:
         conn.execute('''INSERT INTO posts(resource_key,source_id,kind,title,member,body,folder,nas_folder,version,created_at)
@@ -101,6 +107,7 @@ def publish(key, item, result, staging):
                             VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING''',
                          (media_id, key, version, 'thumbnail' if thumb else 'original', str(relative / file.name),
                           nas_folder + '/' + file.name, digest_file(file), file.stat().st_size, mime, width, height, original_id))
+    refresh_record(key)
     return destination
 
 
@@ -210,6 +217,8 @@ def transfer():
             query('UPDATE posts SET transfer_error=true WHERE resource_key=%s', (post['resource_key'],))
             print('NAS transfer unavailable; originals retained; scheduled retry pending', flush=True)
             return 1
+        try: refresh_record(post['resource_key'])
+        except Exception: print('Readable metadata refresh pending; catalog remains available', flush=True)
     for batch in query('SELECT * FROM desktop_thumbnail_backups WHERE NOT nas_available'):
         try:
             backup.send_directory(service=SERVICE, source=ROOT / batch['folder'], destination=batch['nas_folder'],
@@ -221,6 +230,8 @@ def transfer():
             query('UPDATE desktop_thumbnail_backups SET transfer_error=true WHERE snapshot=%s', (batch['snapshot'],))
             print('Desktop thumbnail backup pending; local thumbnails retained', flush=True)
             return 1
+        try: refresh_catalog()
+        except Exception: print('Readable metadata refresh pending; catalog remains available', flush=True)
     return 0
 
 

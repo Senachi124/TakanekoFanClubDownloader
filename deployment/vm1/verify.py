@@ -77,6 +77,10 @@ published = None
 try:
     decision = backup.claim('takaneko', key)
     published = publish(key, {'id': identity, 'kind': 'test'}, {'folder': str(folder), 'title': 'Integration fixture', 'member': 'Self-test'}, staging)
+    check(published.relative_to(ROOT).parts[:5] == ('complete','members','Self-test','posts','2020-01-02'), 'new download uses readable member/category/date path')
+    record = json.loads((published.parent / 'record.json').read_text())
+    check(record['resource_key'] == key and (published.parent / 'index.md').is_file(), 'readable text and source identity sidecar')
+    check(not (published / 'record.json').exists(), 'mutable sidecar excluded from immutable backup source')
     post_date = query('SELECT created_at FROM posts WHERE resource_key=%s', (key,), one=True)['created_at']
     check(int(post_date.timestamp()) == 1577891045, 'publication stores original Japan date rather than download time')
     # The test runs as root, but completed files must match production reader permissions.
@@ -113,6 +117,12 @@ try:
 finally:
     query('DELETE FROM media WHERE resource_key=%s', (key,))
     query('DELETE FROM posts WHERE resource_key=%s', (key,))
-    if published and published.is_relative_to(ROOT / 'complete'): shutil.rmtree(published.parent)
+    if published and published.is_relative_to(ROOT / 'complete'):
+        shutil.rmtree(published.parent)
+        ancestor = published.parent.parent
+        while ancestor != ROOT / 'complete' / 'members' and ancestor.is_relative_to(ROOT / 'complete' / 'members'):
+            try: ancestor.rmdir()
+            except OSError: break
+            ancestor = ancestor.parent
     shutil.rmtree(staging)
 print('Integration verification complete; temporary catalog/local fixture removed. NAS/helper audit record retained when used.')

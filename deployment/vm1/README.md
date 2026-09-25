@@ -14,7 +14,7 @@ Based on upstream `main` at `f3c7d99` (2026-09-24). Deployment follows VM `/opt/
 - Release: `/opt/takaneko/releases/<revision>`; active symlink `/opt/takaneko/current`.
 - Worker: `takanekowork`; reader/web: `takanekoweb`. Only the worker belongs to `vm1-backup`. The web process uses `vm1-media-readers` and has read-only filesystem access to completed originals.
 - PostgreSQL: `vm1_backup`, application schema `takaneko`. Worker role `svc_takaneko` owns its tables; web role `svc_takaneko_web` can read the catalog and update only settings/jobs. Both roles are provisioned through `vm1-backup-admin` for catalog-backup grants. Web has no access to helper resource/transfer tables.
-- Original files: `/var/lib/takaneko/complete`; incomplete downloads: `/var/lib/takaneko/staging` (worker only).
+- Readable VM archive: `/var/lib/takaneko/complete/members/<member>/<posts|blogs>/<Japan publication date>/<time>_<title>__<identity>-v<version>/`. Each post has `index.md` for reading and `record.json` with full source identity, hashes and VM/NAS locations; locally saved originals and prebuilt thumbnails retain their filenames under `files/`. Missing publication dates use `unknown-date`. Incomplete downloads remain under `/var/lib/takaneko/staging` (worker only).
 - Fanclub login import: `/var/lib/takaneko-control/session.json` (0640). Cookies and refresh tokens are never returned through the API or included in PostgreSQL dumps, source code or process arguments. Legacy `/var/lib/takaneko-control/token` is accepted for migration.
 - Web admin password: `/etc/takaneko/admin-password` (root 0600); password hash `/etc/takaneko/auth.json`. Retrieve over SSH with `sudo cat /etc/takaneko/admin-password`. Treat it as a secret.
 
@@ -49,6 +49,22 @@ Transfer only the catalog and thumbnails to VM, then run `sudo python3 server/im
 This explicit desktop import uses the user's local SMB access and full SHA-256 verification instead of round-tripping 12 GiB through VM. It records the verification in `desktop_imports`; it never fabricates or modifies helper `resources`/`transfer_runs` records. The ongoing service continues using the shared VM backup helper for newly downloaded content.
 
 ## Storage and backup
+
+The readable layout follows the member/category organization of VM1's existing Instagram archive and the author/date/index separation documented by ME LINK. Files under `files/` remain immutable. Generated `index.md` / `record.json` sidecars sit outside the helper's source directory, so refreshing metadata never changes an already registered backup manifest. NAS-only desktop imports get readable text and location records on VM without downloading all their originals. Their thumbnails remain in the existing shared batch, referenced by `local_path` in each record.
+
+Upgrade an existing VM catalog while this application's download/transfer jobs are idle:
+
+```sh
+sudo systemctl stop takaneko-auto.timer takaneko-nas.timer takaneko.service takaneko-web.service
+sudo -u takanekowork -g takaneko-read python3 server/migrate_archive_layout.py --apply --verify
+sudo systemctl start takaneko.service takaneko-web.service takaneko-auto.timer takaneko-nas.timer
+```
+
+Check `takaneko-nas.service` and `takaneko-auto.service` are inactive before moving; stopping a timer does not stop its already-running service. Do not interrupt active transfers. The migration only renames this application's completed local directories after checksum verification, updates its catalog transactionally, and reconciles unsent resources through the helper's public claim/downloaded protocol. Journals under `/var/lib/takaneko/layout-migrations` let the same command recover a rename interrupted before its DB commit. Full media IDs, versions, hashes, NAS destinations and download keys remain unchanged. Empty legacy hash containers may be removed; original file bytes are not deleted. The web reader already accepts the new paths beneath `complete/`.
+
+New downloads use the readable hierarchy on both VM and future NAS destinations under `takaneko/media/members/`. Existing NAS objects and imported thumbnail batches keep their verified destinations. Sidecars refresh on publication and successful transfers; rerun the migration command to rebuild them after a desktop import. `--verify` alone checks all local media against the catalog and readable text against stored post content. The archive root includes a Chinese `README.md` explaining paths and NAS-only content.
+
+Migrated on 2026-09-25: 8,865 readable post records, including 98 complete VM publications; all 10,382 locally available media files passed SHA-256 verification. Existing media identities and NAS paths were compared before/after and stayed unchanged. The interrupted-rename recovery, checksum mismatch refusal and NAS-only handling tests passed, as did authenticated HTTP access to a newly published fixture in the new layout.
 
 Each post/blog has a stable helper resource key `takaneko:<kind>:<source-id>:v1`. Claim precedes downloading, long downloads renew the lease, and failures release it. Completed output is renamed atomically into an immutable content-hash version. Publication creates metadata and image thumbnails before making it visible. The catalog tracks SHA-256, bytes, MIME, image dimensions, owner/private permission, variants and independent VM/NAS availability.
 
