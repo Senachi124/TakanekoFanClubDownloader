@@ -13,7 +13,7 @@ Based on upstream `main` at `f3c7d99` (2026-09-24). Deployment follows VM `/opt/
 - Private HTTP: `127.0.0.1:43130`. Dedicated nginx process; existing nginx, ME LINK and Instagram services are not reconfigured or restarted.
 - Release: `/opt/takaneko/releases/<revision>`; active symlink `/opt/takaneko/current`.
 - Worker: `takanekowork`; reader/web: `takanekoweb`. Only the worker belongs to `vm1-backup`. The web process uses `vm1-media-readers` and has read-only filesystem access to completed originals.
-- PostgreSQL: `vm1_backup`, application schema `takaneko`. Worker role `svc_takaneko` owns its tables; web role `svc_takaneko_web` can read the catalog and update only settings/jobs. Both roles are provisioned through `vm1-backup-admin` for catalog-backup grants. Web has no access to helper resource/transfer tables.
+- PostgreSQL: `vm1_backup`, application schema `takaneko`. Worker role `svc_takaneko` owns its tables; web role `svc_takaneko_web` can read the catalog, update settings/download jobs and insert backup requests. Both roles are provisioned through `vm1-backup-admin` for catalog-backup grants. Web has no access to helper resource/transfer tables.
 - Readable VM archive: `/var/lib/takaneko/complete/members/<member>/<posts|blogs>/<Japan publication date>/<time>_<title>__<identity>-v<version>/`. Each post has `index.md` for reading and `record.json` with full source identity, hashes and VM/NAS locations; locally saved originals and prebuilt thumbnails retain their filenames under `files/`. Missing publication dates use `unknown-date`. Incomplete downloads remain under `/var/lib/takaneko/staging` (worker only).
 - Fanclub login import: `/var/lib/takaneko-control/session.json` (0640). Cookies and refresh tokens are never returned through the API or included in PostgreSQL dumps, source code or process arguments. Legacy `/var/lib/takaneko-control/token` is accepted for migration.
 - Web admin password: `/etc/takaneko/admin-password` (root 0600); password hash `/etc/takaneko/auth.json`. Retrieve over SSH with `sudo cat /etc/takaneko/admin-password`. Treat it as a secret.
@@ -34,7 +34,15 @@ Desktop concurrency and web settings accept **1–100**, default **5**. The old 
 
 ## Automatic backups
 
-`takaneko-auto.timer` checks every five minutes and queues a download when due. Default: enabled, every six hours. The download page can disable it or choose 1–168 hours. Missing login data, another active download, NAS transfer failure, or less than 5 GiB free space postpones the run; existing work is not interrupted. Schedule state persists in PostgreSQL and prevents duplicate concurrent jobs. The worker skips verified NAS originals before fetching their details. Nightly VM-to-NAS transfer remains a separate timer with its existing Hong Kong overnight window.
+The download page includes **立即備份到 NAS** / retry and a separate progress bar. `POST /api/backup` requires a logged-in session, same Origin and CSRF token. The web role can only SELECT/INSERT `backup_jobs`; it cannot run commands or write media. A unique partial index prevents duplicate queued/running backups. Progress reports completed posts plus successfully read-back-verified files/bytes, rather than estimated upload bytes. An in-progress large file updates its current filename, and is counted only after validation.
+
+`takaneko-backup.service` is a dedicated queue consumer with an application-only advisory lock. Nightly `takaneko-nas.service` now enqueues a scheduled job and exits. Download jobs and automatic download scheduling never inspect NAS error flags. A failed backup keeps the VM originals and its immutable outbox for retry; it does not pause downloads, reject new downloads, or restart other services. The 5 GiB disk-space guard remains. The installed shared helper permits independent resource/destination transfers; this app does not modify that helper or interrupt other applications.
+
+Each backup snapshots the readable post directory into `/var/lib/takaneko/nas-outbox/<identity>/`, using hard links for immutable local media and frozen `index.md` / portable `record.json`. The helper sends it to `takaneko/media/members/<member>/<category>/<date>/<time-title-identity-version>/` with a distinct `:nas-layout-v2:<version>` delivery key. The original download key is preserved. Only after helper verification does the catalog publish the new NAS locations and completion flag. Completed outbox hard links may be removed; the actual VM originals remain. The portable NAS record contains relative `files/` / `previews/` links without credentials or expiring URLs.
+
+On process restart, interrupted backup jobs become retryable failures. The next manual/nightly run selects only posts still lacking a complete readable NAS copy. Do not restart the backup consumer during an active transfer when deploying updates.
+
+`takaneko-auto.timer` checks every five minutes and queues a download when due. Default: enabled, every six hours. The download page can disable it or choose 1–168 hours. Missing login data, another active download, or less than 5 GiB free space postpones the run; existing work is not interrupted. Schedule state persists in PostgreSQL and prevents duplicate concurrent jobs. The worker skips verified NAS originals before fetching their details. Nightly VM-to-NAS transfer remains a separate timer with its existing Hong Kong overnight window.
 
 ## Import an existing desktop collection
 
@@ -50,6 +58,14 @@ This explicit desktop import uses the user's local SMB access and full SHA-256 v
 
 ## Storage and backup
 
+### Existing NAS archive migration
+
+`server/nas_layout_migration.py export PLAN --manifest-sha ORIGINAL_MANIFEST_SHA256` exports an exact plan for existing verified NAS posts. Deploy the dual-path reader first, then run `activate PLAN`; it publishes the new location plus `nas_previous_path` fallback and excludes those posts from the normal transfer worker until migration finishes. No helper resource table is rewritten.
+
+On the authorized Windows NAS connection, run `deployment/vm1/migrate-nas-readable.py --plan PLAN --manifest MEDIA_MANIFEST --thumbnails VERIFIED_THUMBNAILS --receipt RECEIPT`. It scopes operations to `takaneko/media`, atomically renames each old post folder into the readable hierarchy, verifies every original against the original SHA-256 manifest, and writes/reads back per-post text, portable JSON and prebuilt thumbnails. It never overwrites conflicting content. Rerun the same plan after interruption; completed moves are rechecked. Only empty old containers are removed. Unindexed unmatched files remain untouched and are not made into synthetic posts.
+
+Upload the receipt and run `sudo -u takanekowork -g takaneko-read python3 server/nas_layout_migration.py finish PLAN --receipt RECEIPT`, with both input files readable by that account. It requires matching plan/manifest hashes, the exact post set and unchanged catalog identities, then records NAS verification and removes old-path fallback. During MOVE races the reader tries new → old → new while preserving media IDs, authentication, Range and ETags. This one-time explicitly requested migration uses the existing verified SMB import workflow; ongoing backups use the shared helper.
+
 The readable layout follows the member/category organization of VM1's existing Instagram archive and the author/date/index separation documented by ME LINK. Files under `files/` remain immutable. Generated `index.md` / `record.json` sidecars sit outside the helper's source directory, so refreshing metadata never changes an already registered backup manifest. NAS-only desktop imports get readable text and location records on VM without downloading all their originals. Their thumbnails remain in the existing shared batch, referenced by `local_path` in each record.
 
 Upgrade an existing VM catalog while this application's download/transfer jobs are idle:
@@ -62,7 +78,7 @@ sudo systemctl start takaneko.service takaneko-web.service takaneko-auto.timer t
 
 Check `takaneko-nas.service` and `takaneko-auto.service` are inactive before moving; stopping a timer does not stop its already-running service. Do not interrupt active transfers. The migration only renames this application's completed local directories after checksum verification, updates its catalog transactionally, and reconciles unsent resources through the helper's public claim/downloaded protocol. Journals under `/var/lib/takaneko/layout-migrations` let the same command recover a rename interrupted before its DB commit. Full media IDs, versions, hashes, NAS destinations and download keys remain unchanged. Empty legacy hash containers may be removed; original file bytes are not deleted. The web reader already accepts the new paths beneath `complete/`.
 
-New downloads use the readable hierarchy on both VM and future NAS destinations under `takaneko/media/members/`. Existing NAS objects and imported thumbnail batches keep their verified destinations. Sidecars refresh on publication and successful transfers; rerun the migration command to rebuild them after a desktop import. `--verify` alone checks all local media against the catalog and readable text against stored post content. The archive root includes a Chinese `README.md` explaining paths and NAS-only content.
+New downloads use the readable hierarchy on both VM and NAS under `takaneko/media/members/`. Existing NAS posts follow the verified migration workflow above. VM sidecars refresh on publication and successful transfers; rerun the migration command to rebuild them after a desktop import. `--verify` alone checks all local media against the catalog and readable text against stored post content. The archive root includes a Chinese `README.md` explaining paths and NAS-only content.
 
 Migrated on 2026-09-25: 8,865 readable post records, including 98 complete VM publications; all 10,382 locally available media files passed SHA-256 verification. Existing media identities and NAS paths were compared before/after and stayed unchanged. The interrupted-rename recovery, checksum mismatch refusal and NAS-only handling tests passed, as did authenticated HTTP access to a newly published fixture in the new layout.
 
@@ -72,7 +88,7 @@ Each post/blog has a stable helper resource key `takaneko:<kind>:<source-id>:v1`
 
 Media routes authenticate on every request, serve local completed files first, and fall back to the shared NAS read-only account over the helper's certificate-pinned HTTPS transport. Local/NAS paths remain private. Both sources support GET/HEAD, Range, Content-Length and SHA-256 ETags. No additional disk cache is allocated: VM's existing 5 GiB cache budget is already assigned to other services. NAS reads are streamed with two concurrent slots.
 
-New downloads pause below 5 GiB free space; in-flight downloads finish. NAS transfer errors block new jobs until a successful retry. Failed staging is retained for diagnosis; no automatic deletion of original/failed files or historical NAS versions. Stop/pause prevents scheduling new items while already-running items finish. Re-running skips cataloged resources; interrupted claim-to-catalog transitions reconcile through helper claims after stale leases expire. Source updates require an explicit new version key; the default archives the first successfully captured source ID.
+New downloads pause below 5 GiB free space; in-flight downloads finish. NAS transfer errors affect only the backup queue; downloads continue as explicitly requested on 2026-09-25, overriding the older VM guideline to pause downloads on NAS errors. Failed staging is retained for diagnosis; no automatic deletion of original/failed files or historical NAS versions. Stop/pause prevents scheduling new items while already-running items finish. Re-running skips cataloged resources; interrupted claim-to-catalog transitions reconcile through helper claims after stale leases expire. Source updates require an explicit new version key; the default archives the first successfully captured source ID.
 
 No shared ME LINK private media socket or other service's DB credentials are reused. The current web reader is isolated and uses the common NAS transport; it does not claim to provide a VM-wide unified media API. NAS backup is one verified NAS copy plus retained VM originals, not an independent second NAS backup.
 
@@ -95,7 +111,10 @@ TLS is reused from `/etc/letsencrypt/live/vm1.learnfromidol.com/`; a dedicated t
 node tests/server.test.js
 python3 -m unittest discover -s tests -p 'test_*.py'
 sudo python3 deployment/vm1/verify.py
+sudo python3 deployment/vm1/verify-backup-controls.py
 ```
+
+The backup-control check verifies authentication, CSRF and the unique active-job constraint in a rolled-back transaction. It never publishes a backup job or transfers NAS files. Browser progress checks use intercepted fixture responses for the same reason.
 
 The integration check logs in with the protected admin secret, verifies CSRF and authentication boundaries, checks settings at 100, inserts a temporary synthetic catalog fixture, verifies complete/partial/conditional media responses, and removes that fixture afterwards. `--nas` additionally sends this synthetic fixture through the real helper and tests NAS GET/HEAD/Range using the read-only account; the helper audit and NAS fixture remain, local/catalog test data are removed.
 

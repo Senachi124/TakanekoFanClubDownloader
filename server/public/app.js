@@ -60,7 +60,20 @@ async function refresh() {
   $('autoMessage').textContent = data.settings.auto_message;
   const next = data.settings.auto_next_at;
   $('autoNext').textContent = data.settings.auto_enabled && next ? `下次檢查：${new Date(next).toLocaleString('zh-HK', { timeZone: 'Asia/Hong_Kong' })}（香港時間）；排程每 5 分鐘確認一次。` : '手動下載仍可隨時使用。';
-  if (data.stats.backup_errors) notice('NAS 備份暫時失敗。本機內容已保留，下一個備份時段會重試。');
+  const backup = data.backup;
+  const backupActive = backup && ['queued','running'].includes(backup.status);
+  $('backupStart').disabled = !!backupActive;
+  $('backupStart').textContent = backupActive ? '備份進行中…' : backup?.status === 'failed' ? '重試 NAS 備份 ↑' : '立即備份到 NAS ↑';
+  $('backupState').textContent = {queued:'排隊中',running:'備份中',completed:'已完成',failed:'待重試'}[backup?.status] || '待命';
+  $('backupMessage').textContent = backup?.message || '可手動備份，或等待香港時間 03:15–05:45 的排程。';
+  const percent = backup?.total ? Math.min(100,backup.completed / backup.total * 100) : backup?.status === 'completed' ? 100 : 0;
+  $('backupProgress').value = percent;
+  $('backupPercent').textContent = `${Math.floor(percent)}%`;
+  $('backupCount').textContent = `${backup?.completed || 0} / ${backup?.total || 0} 篇${backup?.failed ? ` · ${backup.failed} 篇需重試` : ''}`;
+  $('backupFiles').textContent = `已校驗 ${(backup?.files_done || 0).toLocaleString()} 個檔案 · ${((backup?.bytes_done || 0) / 1024 / 1024).toFixed(1)} MiB`;
+  $('backupItem').textContent = backupActive && backup.current_item ? `目前：${backup.current_item}` : '';
+  $('backupPending').textContent = `${data.backupPending.toLocaleString()} 篇待備份／整理`;
+  $('backupWarning').hidden = !data.stats.backup_errors;
   if (browsing && lastCount !== data.stats.posts) { await loadPosts(); lastCount = data.stats.posts; }
 }
 async function loadPosts() {
@@ -172,6 +185,7 @@ $('autoForm').addEventListener('submit', action(async () => {
   notice('自動備份排程已儲存。'); await refresh();
 }));
 $('start').addEventListener('click', action(async () => { await api('/api/start', {}); await refresh(); }));
+$('backupStart').addEventListener('click', action(async () => { $('backupStart').disabled = true; try { await api('/api/backup', {}); await refresh(); } catch (error) { $('backupStart').disabled = false; throw error; } }));
 $('pause').addEventListener('click', action(async () => { await api('/api/control', { command: job?.command === 'pause' ? 'run' : 'pause' }); await refresh(); }));
 $('cancel').addEventListener('click', action(async () => { await api('/api/control', { command: 'cancel' }); notice('停止安排新下載，進行中的項目完成後結束。'); await refresh(); }));
 $('mediaType').addEventListener('change', action(async () => { offset = 0; await loadPosts(); }));

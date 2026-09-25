@@ -30,6 +30,7 @@ GRANT USAGE ON SCHEMA takaneko TO svc_takaneko_web;
 GRANT SELECT ON takaneko.settings,takaneko.jobs,takaneko.posts,takaneko.media,takaneko.desktop_thumbnail_backups TO svc_takaneko_web;
 GRANT UPDATE ON takaneko.settings TO svc_takaneko_web;
 GRANT INSERT,UPDATE ON takaneko.jobs TO svc_takaneko_web;
+GRANT SELECT,INSERT ON takaneko.backup_jobs TO svc_takaneko_web;
 SQL
 python3 deployment/vm1/provision_auth.py
 ln -sfn "$release" /opt/takaneko/current
@@ -37,8 +38,8 @@ install -m 0644 deployment/vm1/nginx.conf /etc/takaneko/nginx.conf
 install -m 0644 deployment/vm1/*.service deployment/vm1/*.timer /etc/systemd/system/
 nginx -t -c /etc/takaneko/nginx.conf
 systemctl daemon-reload
-systemctl enable takaneko.service takaneko-web.service takaneko-https.service takaneko-nas.timer takaneko-auto.timer takaneko-tls-reload.timer
-systemctl restart takaneko.service takaneko-web.service takaneko-https.service
+systemctl enable takaneko.service takaneko-web.service takaneko-https.service takaneko-backup.service takaneko-nas.timer takaneko-auto.timer takaneko-tls-reload.timer
+systemctl restart takaneko.service takaneko-web.service takaneko-https.service takaneko-backup.service
 systemctl start takaneko-nas.timer takaneko-auto.timer takaneko-tls-reload.timer
 ufw allow 2083/tcp comment 'Takaneko Fanclub HTTPS'
 python3 deployment/vm1/register_portal.py

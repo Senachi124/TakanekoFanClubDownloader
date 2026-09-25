@@ -15,7 +15,7 @@ from PIL import Image, ImageOps
 from common import ROOT, CONTROL, db, query, initialize
 from fanclub_auth import get_token
 from post_dates import publication_date
-from archive_layout import readable_folder, safe_path, refresh_record, refresh_catalog
+from archive_layout import readable_folder, safe_path, refresh_record
 
 sys.path.insert(0, '/opt/vm1-backup')
 import vm1_backup as backup
@@ -178,10 +178,9 @@ def run_job(bridge, job):
             command = query('SELECT command FROM jobs WHERE id=%s', (job_id,), one=True)['command']
             cancelled = command == 'cancel'
             low_disk = shutil.disk_usage(ROOT).free < MIN_FREE
-            nas_failed = bool(query('SELECT 1 FROM posts WHERE transfer_error UNION ALL SELECT 1 FROM desktop_thumbnail_backups WHERE transfer_error LIMIT 1', one=True))
-            paused = command == 'pause' or low_disk or nas_failed
+            paused = command == 'pause' or low_disk
             query('UPDATE jobs SET status=%s,message=%s,updated_at=now() WHERE id=%s',
-                  ('paused' if paused else 'running', '磁碟空間不足，已暫停' if low_disk else ('NAS 備份失敗，等待恢復' if nas_failed else ('已暫停；等待進行中的項目完成' if paused else '下載中')), job_id))
+                  ('paused' if paused else 'running', '磁碟空間不足，已暫停' if low_disk else ('已暫停；等待進行中的項目完成' if paused else '下載中'), job_id))
             if cancelled: exhausted = True
             while not exhausted and not paused and len(active) < settings['concurrency']:
                 item = next(pending, None)
@@ -200,41 +199,6 @@ def run_job(bridge, job):
           (status, '已停止；完成的檔案已保留' if cancelled else ('部分下載失敗，可重試' if row['failed'] else '下載完成'), job_id))
 
 
-def transfer():
-    # Only a timer invokes this function; reading media never triggers a transfer.
-    for post in query('SELECT * FROM posts WHERE NOT nas_available ORDER BY created_at'):
-        try:
-            decision = backup.claim(SERVICE, post['resource_key'])
-            if decision['action'] == 'busy': continue
-            if decision['action'] == 'download':
-                backup.downloaded(SERVICE, post['resource_key'], decision['lease_token'], ROOT / post['folder'])
-            backup.send_directory(service=SERVICE, source=ROOT / post['folder'], destination=post['nas_folder'],
-                                  resource_key=post['resource_key'], delete_source=False)
-            with db() as conn:
-                conn.execute('UPDATE posts SET nas_available=true,transfer_error=false WHERE resource_key=%s', (post['resource_key'],))
-                conn.execute('UPDATE media SET nas_available=true,nas_verified_at=now() WHERE resource_key=%s', (post['resource_key'],))
-        except Exception:
-            query('UPDATE posts SET transfer_error=true WHERE resource_key=%s', (post['resource_key'],))
-            print('NAS transfer unavailable; originals retained; scheduled retry pending', flush=True)
-            return 1
-        try: refresh_record(post['resource_key'])
-        except Exception: print('Readable metadata refresh pending; catalog remains available', flush=True)
-    for batch in query('SELECT * FROM desktop_thumbnail_backups WHERE NOT nas_available'):
-        try:
-            backup.send_directory(service=SERVICE, source=ROOT / batch['folder'], destination=batch['nas_folder'],
-                                  resource_key=f"takaneko:desktop-thumbnails:{batch['snapshot']}:v1", delete_source=False)
-            with db() as conn:
-                conn.execute('UPDATE desktop_thumbnail_backups SET nas_available=true,transfer_error=false WHERE snapshot=%s', (batch['snapshot'],))
-                conn.execute("UPDATE media SET nas_available=true,nas_verified_at=now() WHERE variant='thumbnail' AND starts_with(nas_path,%s)", (batch['nas_folder'] + '/',))
-        except Exception:
-            query('UPDATE desktop_thumbnail_backups SET transfer_error=true WHERE snapshot=%s', (batch['snapshot'],))
-            print('Desktop thumbnail backup pending; local thumbnails retained', flush=True)
-            return 1
-        try: refresh_catalog()
-        except Exception: print('Readable metadata refresh pending; catalog remains available', flush=True)
-    return 0
-
-
 def schedule():
     """Queue at most one due job; systemd wakes this coordinator every five minutes."""
     with db() as conn:
@@ -244,8 +208,6 @@ def schedule():
             message = '等待匯入 Fanclub 登入資料'
         elif conn.execute("SELECT 1 FROM jobs WHERE status IN ('queued','running','paused') LIMIT 1").fetchone():
             message = '已有下載進行中，完成後再檢查'
-        elif conn.execute('SELECT 1 FROM posts WHERE transfer_error UNION ALL SELECT 1 FROM desktop_thumbnail_backups WHERE transfer_error LIMIT 1').fetchone():
-            message = '等待 NAS 備份恢復'
         elif shutil.disk_usage(ROOT).free < MIN_FREE:
             message = '磁碟空間不足，暫停自動下載'
         elif not settings['due']:
@@ -263,15 +225,15 @@ def main():
     initialize()
     if '--initialize' in sys.argv: return 0
     if '--schedule' in sys.argv: return schedule()
-    if '--transfer' in sys.argv: return transfer()
+    if '--transfer' in sys.argv:
+        from backup_worker import enqueue
+        enqueue('manual')
+        return 0
     query("UPDATE jobs SET status='failed',message='服務重啟，請重新開始；已完成檔案保留' WHERE status IN ('running','paused')")
     bridge = Bridge()
     while True:
         job = query("SELECT * FROM jobs WHERE status='queued' ORDER BY created_at LIMIT 1", one=True)
         if not job: time.sleep(2); continue
-        if query('SELECT 1 FROM posts WHERE transfer_error UNION ALL SELECT 1 FROM desktop_thumbnail_backups WHERE transfer_error LIMIT 1', one=True):
-            query("UPDATE jobs SET status='failed',message='NAS 備份失敗，恢復備份後再開始下載' WHERE id=%s", (job['id'],))
-            continue
         query("UPDATE jobs SET status='running',message='取得投稿清單',updated_at=now() WHERE id=%s", (job['id'],))
         try:
             if bridge.process.poll() is not None: bridge = Bridge()

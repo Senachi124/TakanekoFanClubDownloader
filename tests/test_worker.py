@@ -10,7 +10,7 @@ import worker
 
 
 class WorkerTests(unittest.TestCase):
-    def test_active_job_does_not_start_more_downloads_after_nas_failure(self):
+    def test_active_job_continues_downloads_after_nas_failure(self):
         commands = iter(['run', 'cancel'])
         updates = []
         def query(sql, params=(), one=False):
@@ -26,8 +26,8 @@ class WorkerTests(unittest.TestCase):
              patch.object(worker,'process_item') as download, patch.object(worker.time,'sleep'), \
              patch.object(worker.shutil,'disk_usage',return_value=MagicMock(free=10**12)):
             worker.run_job(bridge,{'id':'job'})
-        download.assert_not_called()
-        self.assertTrue(any(values and values[0]=='paused' and 'NAS' in values[1] for values in updates))
+        download.assert_called_once()
+        self.assertFalse(any(values and values[0]=='paused' for values in updates))
 
     def test_imported_nas_post_does_not_download_or_claim(self):
         bridge = MagicMock()
@@ -49,7 +49,7 @@ class WorkerTests(unittest.TestCase):
     def test_due_automatic_backup_queues_once_and_advances_schedule(self):
         connection = MagicMock()
         connection.execute.return_value.fetchone.side_effect = [
-            {'auto_enabled': True, 'due': True}, None, None, {'id': 'queued'}]
+            {'auto_enabled': True, 'due': True}, None, {'id': 'queued'}]
         with tempfile.TemporaryDirectory() as tmp, patch.object(worker, 'CONTROL', Path(tmp)), \
              patch.object(worker, 'db', return_value=contextlib.nullcontext(connection)), \
              patch.object(worker.shutil, 'disk_usage', return_value=MagicMock(free=10**12)):

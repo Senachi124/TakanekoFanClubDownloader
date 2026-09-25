@@ -59,6 +59,15 @@ def initialize():
           nas_available boolean NOT NULL DEFAULT false, transfer_error boolean NOT NULL DEFAULT false,
           created_at timestamptz NOT NULL DEFAULT now());
         ALTER TABLE posts ADD COLUMN IF NOT EXISTS local_available boolean NOT NULL DEFAULT true;
+        ALTER TABLE posts ADD COLUMN IF NOT EXISTS nas_layout_ready boolean NOT NULL DEFAULT false;
+        ALTER TABLE posts ADD COLUMN IF NOT EXISTS nas_migration_pending boolean NOT NULL DEFAULT false;
+        CREATE TABLE IF NOT EXISTS backup_jobs (
+          id text PRIMARY KEY, status text NOT NULL DEFAULT 'queued', trigger text NOT NULL DEFAULT 'manual',
+          total integer NOT NULL DEFAULT 0, completed integer NOT NULL DEFAULT 0, failed integer NOT NULL DEFAULT 0,
+          files_done bigint NOT NULL DEFAULT 0, bytes_done bigint NOT NULL DEFAULT 0,
+          current_item text NOT NULL DEFAULT '', message text NOT NULL DEFAULT '等待備份程序',
+          created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
+        CREATE UNIQUE INDEX IF NOT EXISTS one_active_backup ON backup_jobs ((true)) WHERE status IN ('queued','running');
         CREATE TABLE IF NOT EXISTS desktop_imports (
           snapshot text PRIMARY KEY, files integer NOT NULL, bytes bigint NOT NULL,
           posts integer NOT NULL, manifest_sha256 text NOT NULL, verified_at timestamptz NOT NULL DEFAULT now());
@@ -75,6 +84,7 @@ def initialize():
           nas_verified_at timestamptz, original_id text,
           UNIQUE(resource_key,relative_path,variant));
         ALTER TABLE media ALTER COLUMN local_verified_at DROP NOT NULL;
+        ALTER TABLE media ADD COLUMN IF NOT EXISTS nas_previous_path text;
         CREATE INDEX IF NOT EXISTS posts_member_date ON posts(member,created_at DESC,resource_key);
         CREATE INDEX IF NOT EXISTS media_thumbnail_original ON media(original_id) WHERE variant='thumbnail';
         ''')

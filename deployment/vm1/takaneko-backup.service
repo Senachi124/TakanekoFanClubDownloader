@@ -1,18 +1,23 @@
 [Unit]
-Description=Takaneko immutable media NAS transfer
+Description=Takaneko independent NAS backup queue
 After=network-online.target postgresql.service
 [Service]
-Type=oneshot
 User=takanekowork
 Group=takaneko-read
 SupplementaryGroups=vm1-backup
 WorkingDirectory=/opt/takaneko/current
-ExecStart=/usr/bin/python3 /opt/takaneko/current/server/backup_worker.py --enqueue
+ExecStart=/usr/bin/python3 /opt/takaneko/current/server/backup_worker.py
 Environment=PYTHONDONTWRITEBYTECODE=1
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
 UMask=0027
-TimeoutStartSec=0
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-MemoryMax=384M
+ReadWritePaths=/var/lib/takaneko
+MemoryMax=512M
+TasksMax=64
+[Install]
+WantedBy=multi-user.target

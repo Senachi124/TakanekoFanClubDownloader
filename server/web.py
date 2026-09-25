@@ -122,7 +122,9 @@ class Handler(BaseHTTPRequestHandler):
             stats = query('SELECT count(*) AS posts,count(*) FILTER(WHERE nas_available) AS backed_up,count(*) FILTER(WHERE transfer_error)+(SELECT count(*) FROM desktop_thumbnail_backups WHERE transfer_error) AS backup_errors FROM posts', one=True)
             return self.respond(200, {'csrf': session['csrf'], 'hasToken': (CONTROL / 'session.json').exists() or (CONTROL / 'token').exists(),
                                     'settings': query('SELECT * FROM settings WHERE id=1', one=True),
-                                    'job': query('SELECT * FROM jobs ORDER BY created_at DESC LIMIT 1', one=True), 'stats': stats})
+                                    'job': query('SELECT * FROM jobs ORDER BY created_at DESC LIMIT 1', one=True), 'stats': stats,
+                                    'backup': query('SELECT * FROM backup_jobs ORDER BY created_at DESC LIMIT 1', one=True),
+                                    'backupPending': query('SELECT count(*) AS count FROM posts WHERE NOT nas_layout_ready', one=True)['count']})
         if url.path in ('/api/posts', '/api/library'):
             try: result = collection(parse_qs(url.query), multimedia=url.path == '/api/library')
             except ValueError: return self.respond(400, {'error': '請檢查頁碼與媒體類型。'})
@@ -179,6 +181,10 @@ class Handler(BaseHTTPRequestHandler):
                     return self.respond(409, {'error': '已有下載工作進行中。'})
                 query("INSERT INTO jobs(id,status,message) VALUES(%s,'queued','準備下載')", (uuid.uuid4().hex,))
                 return self.respond(202, {'ok': True})
+            if self.path == '/api/backup':
+                queued = query("INSERT INTO backup_jobs(id,trigger) VALUES(%s,'manual') ON CONFLICT DO NOTHING RETURNING id", (uuid.uuid4().hex,), one=True)
+                if not queued: return self.respond(409, {'error': '已有 NAS 備份進行中，下載仍可獨立操作。'})
+                return self.respond(202, {'ok': True, 'id': queued['id']})
             if self.path == '/api/control':
                 command = data['command']
                 if command not in ('pause', 'run', 'cancel'): raise ValueError('Command')
@@ -233,12 +239,24 @@ class Handler(BaseHTTPRequestHandler):
                 acquired = NAS_SLOTS.acquire(timeout=10)
                 if not acquired: return self.respond(503, {'error': '讀取忙碌中，請稍後重試。'})
                 nas = ReadOnlyNAS()
-                con = nas.connect()
-                con.sock.settimeout(30)
                 headers = {'Authorization': nas.auth}
                 if status == 206: headers['Range'] = f'bytes={start}-{end}'
-                con.request(self.command, nas.path(row['nas_path']), headers=headers)
-                source = con.getresponse()
+                tried = set()
+                for attempt in range(3):
+                    candidates = [p for p in (row['nas_path'],row.get('nas_previous_path')) if p and p not in tried]
+                    # MOVE can occur between a new-path 404 and the old-path request.
+                    if not candidates and attempt == 2: candidates = [row['nas_path']]
+                    if not candidates: break
+                    path = candidates[0]
+                    if not path.startswith(('takaneko/media/','takaneko/thumbnails/')) or '..' in path.split('/'): raise ValueError('NAS path')
+                    tried.add(path)
+                    con = nas.connect()
+                    con.sock.settimeout(30)
+                    con.request(self.command, nas.path(path), headers=headers)
+                    source = con.getresponse()
+                    if source.status != 404: break
+                    source.close(); con.close()
+                    row = query('SELECT * FROM media WHERE media_id=%s', (media_id,), one=True)
                 if source.status != status or int(source.getheader('Content-Length', '-1')) != end - start + 1:
                     raise OSError('NAS unavailable')
                 if status == 206 and source.getheader('Content-Range') != f"bytes {start}-{end}/{row['size']}": raise OSError('Invalid range')
