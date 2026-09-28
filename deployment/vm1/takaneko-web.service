@@ -1,6 +1,7 @@
 [Unit]
 Description=Takaneko authenticated web and read-only media
 After=network-online.target postgresql.service
+Wants=network-online.target
 [Service]
 User=takanekoweb
 Group=takaneko-control
@@ -9,7 +10,8 @@ WorkingDirectory=/opt/takaneko/current
 ExecStart=/usr/bin/python3 /opt/takaneko/current/server/web.py
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=TAKANEKO_DB_CONFIG=/etc/vm1-backup/services/takaneko_web.json
-Environment=TAKANEKO_ORIGIN=https://vm1.learnfromidol.com:2083
+EnvironmentFile=/etc/takaneko/runtime.env
+Environment=TZ=Asia/Hong_Kong
 Restart=on-failure
 RestartSec=5
 UMask=0027

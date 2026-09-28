@@ -67,7 +67,10 @@ def initialize():
           files_done bigint NOT NULL DEFAULT 0, bytes_done bigint NOT NULL DEFAULT 0,
           current_item text NOT NULL DEFAULT '', message text NOT NULL DEFAULT '等待備份程序',
           created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
-        CREATE UNIQUE INDEX IF NOT EXISTS one_active_backup ON backup_jobs ((true)) WHERE status IN ('queued','running');
+        ALTER TABLE backup_jobs ADD COLUMN IF NOT EXISTS next_run_at timestamptz NOT NULL DEFAULT now();
+        ALTER TABLE backup_jobs ADD COLUMN IF NOT EXISTS verified_files jsonb NOT NULL DEFAULT '{}';
+        DROP INDEX IF EXISTS one_active_backup;
+        CREATE UNIQUE INDEX IF NOT EXISTS one_pending_backup_per_trigger ON backup_jobs (trigger) WHERE status IN ('queued','running','waiting');
         CREATE TABLE IF NOT EXISTS desktop_imports (
           snapshot text PRIMARY KEY, files integer NOT NULL, bytes bigint NOT NULL,
           posts integer NOT NULL, manifest_sha256 text NOT NULL, verified_at timestamptz NOT NULL DEFAULT now());

@@ -3,6 +3,7 @@ import base64
 from collections import defaultdict
 from datetime import datetime
 import hashlib
+import html
 import hmac
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -19,12 +20,14 @@ import uuid
 from common import ROOT, CONTROL, query
 from fanclub_auth import save_import
 from library import collection
+from backup_window import HK
 
 sys.path.insert(0, '/opt/vm1-backup')
 from vm1_backup import NAS
 
 PUBLIC = Path(__file__).with_name('public')
-ORIGIN = os.environ.get('TAKANEKO_ORIGIN', 'https://vm1.learnfromidol.com:2083')
+ORIGIN = os.environ.get('TAKANEKO_ORIGIN', 'http://127.0.0.1:43130')
+HOME_URL = os.environ.get('TAKANEKO_HOME_URL', '')
 SESSIONS = {}
 ATTEMPTS = defaultdict(list)
 LOCK = threading.Lock()
@@ -76,7 +79,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def respond(self, status, value, extra=None, mime='application/json; charset=utf-8'):
         body = value if isinstance(value, bytes) else json.dumps(value, ensure_ascii=False,
-            default=lambda item: item.isoformat() if isinstance(item, datetime) else str(item)).encode()
+            default=lambda item: item.astimezone(HK).isoformat() if isinstance(item, datetime) else str(item)).encode()
         self.send_response(status)
         self.send_header('Content-Type', mime)
         self.send_header('Content-Length', str(len(body)))
@@ -114,7 +117,11 @@ class Handler(BaseHTTPRequestHandler):
         if url.path in ('/', '/downloads', '/browse', '/library', '/app.js', '/style.css'):
             name = {'/': 'index.html', '/downloads': 'index.html', '/browse': 'index.html', '/library': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}[url.path]
             mime = {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name]
-            return self.respond(200, (PUBLIC / name).read_bytes(), mime=mime)
+            content = (PUBLIC / name).read_bytes()
+            if name == 'index.html':
+                if not HOME_URL: raise ValueError('Configure TAKANEKO_HOME_URL from home SERVICES_DOMAIN')
+                content = content.replace(b'__HOME_URL__',html.escape(HOME_URL,quote=True).encode())
+            return self.respond(200, content, mime=mime)
         if url.path == '/healthz': return self.respond(200, {'ok': True})
         session = self.session()
         if not session: return self.respond(401, {'error': '請先登入。'})
@@ -123,7 +130,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(200, {'csrf': session['csrf'], 'hasToken': (CONTROL / 'session.json').exists() or (CONTROL / 'token').exists(),
                                     'settings': query('SELECT * FROM settings WHERE id=1', one=True),
                                     'job': query('SELECT * FROM jobs ORDER BY created_at DESC LIMIT 1', one=True), 'stats': stats,
-                                    'backup': query('SELECT * FROM backup_jobs ORDER BY created_at DESC LIMIT 1', one=True),
+                                    'backup': query("SELECT id,status,trigger,total,completed,failed,files_done,bytes_done,current_item,message,created_at,updated_at,next_run_at FROM backup_jobs ORDER BY CASE status WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'waiting' THEN 2 ELSE 3 END,created_at DESC LIMIT 1", one=True),
+                                    'manualBackupBusy': bool(query("SELECT 1 FROM backup_jobs WHERE trigger='manual' AND status IN ('queued','running') LIMIT 1",one=True)),
                                     'backupPending': query('SELECT count(*) AS count FROM posts WHERE NOT nas_layout_ready', one=True)['count']})
         if url.path in ('/api/posts', '/api/library'):
             try: result = collection(parse_qs(url.query), multimedia=url.path == '/api/library')

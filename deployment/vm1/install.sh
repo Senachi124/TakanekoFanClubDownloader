@@ -34,7 +34,7 @@ GRANT SELECT,INSERT ON takaneko.backup_jobs TO svc_takaneko_web;
 SQL
 python3 deployment/vm1/provision_auth.py
 ln -sfn "$release" /opt/takaneko/current
-install -m 0644 deployment/vm1/nginx.conf /etc/takaneko/nginx.conf
+python3 deployment/vm1/configure_endpoint.py
 install -m 0644 deployment/vm1/*.service deployment/vm1/*.timer /etc/systemd/system/
 nginx -t -c /etc/takaneko/nginx.conf
 systemctl daemon-reload

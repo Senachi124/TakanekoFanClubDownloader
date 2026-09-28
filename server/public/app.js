@@ -13,7 +13,7 @@ document.title = multimedia ? '多媒體庫 · Takaneko' : browsing ? '瀏覽內
 const initialMember = new URLSearchParams(location.search).get('member');
 if (initialMember) member = initialMember;
 function displayDate(value) {
-  return new Date(value).toLocaleString('zh-HK', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  return new Date(value).toLocaleString('zh-HK', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 }
 async function api(path, data) {
   const response = await fetch(path, data === undefined ? {} : {
@@ -59,13 +59,14 @@ async function refresh() {
   $('autoState').textContent = data.settings.auto_enabled ? '已啟用' : '已停用';
   $('autoMessage').textContent = data.settings.auto_message;
   const next = data.settings.auto_next_at;
-  $('autoNext').textContent = data.settings.auto_enabled && next ? `下次檢查：${new Date(next).toLocaleString('zh-HK', { timeZone: 'Asia/Hong_Kong' })}（香港時間）；排程每 5 分鐘確認一次。` : '手動下載仍可隨時使用。';
+  $('autoNext').textContent = data.settings.auto_enabled && next ? `下次檢查：${displayDate(next)}（香港時間）；排程每 5 分鐘確認一次。` : '手動下載仍可隨時使用。';
   const backup = data.backup;
   const backupActive = backup && ['queued','running'].includes(backup.status);
-  $('backupStart').disabled = !!backupActive;
-  $('backupStart').textContent = backupActive ? '備份進行中…' : backup?.status === 'failed' ? '重試 NAS 備份 ↑' : '立即備份到 NAS ↑';
-  $('backupState').textContent = {queued:'排隊中',running:'備份中',completed:'已完成',failed:'待重試'}[backup?.status] || '待命';
-  $('backupMessage').textContent = backup?.message || '可手動備份，或等待香港時間 03:15–05:45 的排程。';
+  $('backupStart').disabled = data.manualBackupBusy;
+  $('backupStart').textContent = data.manualBackupBusy ? '手動備份已排隊／進行中…' : backup?.status === 'failed' ? '重試 NAS 備份 ↑' : '立即備份到 NAS ↑';
+  $('backupState').textContent = {queued:'排隊中',running:'備份中',completed:'已完成',failed:'待重試',waiting:'等待備份窗口'}[backup?.status] || '待命';
+  $('backupMessage').textContent = backup?.message || '可手動備份，或等待香港時間 03:00–09:00 的排程。';
+  $('backupNext').textContent = backup?.status === 'waiting' ? `預定續傳：${displayDate(backup.next_run_at)}（香港時間 UTC+08:00）；手動備份可隨時執行。` : backup ? (backup.trigger === 'manual' ? '手動備份：不限時段' : '自動備份：09:00 截止，未完成工作保留續傳') : '';
   const percent = backup?.total ? Math.min(100,backup.completed / backup.total * 100) : backup?.status === 'completed' ? 100 : 0;
   $('backupProgress').value = percent;
   $('backupPercent').textContent = `${Math.floor(percent)}%`;

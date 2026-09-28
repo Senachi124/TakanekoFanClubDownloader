@@ -34,13 +34,15 @@ Desktop concurrency and web settings accept **1–100**, default **5**. The old 
 
 ## Automatic backups
 
-The download page includes **立即備份到 NAS** / retry and a separate progress bar. `POST /api/backup` requires a logged-in session, same Origin and CSRF token. The web role can only SELECT/INSERT `backup_jobs`; it cannot run commands or write media. A unique partial index prevents duplicate queued/running backups. Progress reports completed posts plus successfully read-back-verified files/bytes, rather than estimated upload bytes. An in-progress large file updates its current filename, and is counted only after validation.
+The 2026-09-28 [home compliance update](home-compliance.md) supersedes older schedule/restart notes below: automatic NAS I/O is limited to 03:00–09:00 Hong Kong time, with persistent next-window continuation; manual work remains unrestricted by time. See that document for cutoff implementation, boot dependencies, domain configuration, acceptance tests and compliant rollback.
+
+The download page includes **立即備份到 NAS** / retry and a separate progress bar. `POST /api/backup` requires a logged-in session, same Origin and CSRF token. The web role can only SELECT/INSERT `backup_jobs`; it cannot run commands or write media. A unique partial index per trigger prevents duplicate pending requests while allowing manual work beside a waiting automatic job. Progress reports completed posts plus successfully read-back-verified files/bytes, rather than estimated upload bytes. An in-progress large file updates its current filename, and is counted only after validation.
 
 `takaneko-backup.service` is a dedicated queue consumer with an application-only advisory lock. Nightly `takaneko-nas.service` now enqueues a scheduled job and exits. Download jobs and automatic download scheduling never inspect NAS error flags. A failed backup keeps the VM originals and its immutable outbox for retry; it does not pause downloads, reject new downloads, or restart other services. The 5 GiB disk-space guard remains. The installed shared helper permits independent resource/destination transfers; this app does not modify that helper or interrupt other applications.
 
 Each backup snapshots the readable post directory into `/var/lib/takaneko/nas-outbox/<identity>/`, using hard links for immutable local media and frozen `index.md` / portable `record.json`. The helper sends it to `takaneko/media/members/<member>/<category>/<date>/<time-title-identity-version>/` with a distinct `:nas-layout-v2:<version>` delivery key. The original download key is preserved. Only after helper verification does the catalog publish the new NAS locations and completion flag. Completed outbox hard links may be removed; the actual VM originals remain. The portable NAS record contains relative `files/` / `previews/` links without credentials or expiring URLs.
 
-On process restart, interrupted backup jobs become retryable failures. The next manual/nightly run selects only posts still lacking a complete readable NAS copy. Do not restart the backup consumer during an active transfer when deploying updates.
+On process restart, interrupted jobs retain their original trigger and progress; automatic work rechecks the Hong Kong window before resuming. The next manual/nightly run selects only posts still lacking a complete readable NAS copy. Do not restart the backup consumer during an active transfer when deploying updates.
 
 `takaneko-auto.timer` checks every five minutes and queues a download when due. Default: enabled, every six hours. The download page can disable it or choose 1–168 hours. Missing login data, another active download, or less than 5 GiB free space postpones the run; existing work is not interrupted. Schedule state persists in PostgreSQL and prevents duplicate concurrent jobs. The worker skips verified NAS originals before fetching their details. Nightly VM-to-NAS transfer remains a separate timer with its existing Hong Kong overnight window.
 
@@ -84,7 +86,7 @@ Migrated on 2026-09-25: 8,865 readable post records, including 98 complete VM pu
 
 Each post/blog has a stable helper resource key `takaneko:<kind>:<source-id>:v1`. Claim precedes downloading, long downloads renew the lease, and failures release it. Completed output is renamed atomically into an immutable content-hash version. Publication creates metadata and image thumbnails before making it visible. The catalog tracks SHA-256, bytes, MIME, image dimensions, owner/private permission, variants and independent VM/NAS availability.
 
-`takaneko-nas.timer` runs **03:15, 03:45, 04:15, 04:45, 05:15, 05:45 Asia/Hong_Kong**. Missed windows do not trigger daytime uploads. Each transfer uses the shared helper's verification/locking; only successful `nas_verified` output publishes NAS availability. Retries use the same version/key. All completed local originals remain on VM; this deployment does **not** authorize or implement automatic original deletion.
+`takaneko-nas.timer` enqueues every 15 minutes at **03:00–08:45 Asia/Hong_Kong**; automatic I/O stops at **09:00**. Missed windows do not trigger daytime uploads. Each transfer uses the shared helper's verification/locking; only successful `nas_verified` output publishes NAS availability. Retries use the same version/key. All completed local originals remain on VM; this deployment does **not** authorize or implement automatic original deletion.
 
 Media routes authenticate on every request, serve local completed files first, and fall back to the shared NAS read-only account over the helper's certificate-pinned HTTPS transport. Local/NAS paths remain private. Both sources support GET/HEAD, Range, Content-Length and SHA-256 ETags. No additional disk cache is allocated: VM's existing 5 GiB cache budget is already assigned to other services. NAS reads are streamed with two concurrent slots.
 
@@ -114,7 +116,7 @@ sudo python3 deployment/vm1/verify.py
 sudo python3 deployment/vm1/verify-backup-controls.py
 ```
 
-The backup-control check verifies authentication, CSRF and the unique active-job constraint in a rolled-back transaction. It never publishes a backup job or transfers NAS files. Browser progress checks use intercepted fixture responses for the same reason.
+The backup-control check verifies authentication, CSRF and public status without writing jobs or transferring NAS files. Queue and progress acceptance uses verify-backup-window.py with a dedicated takaneko_test_ database and protected TAKANEKO_DB_CONFIG; the script refuses the production database. Browser progress checks use intercepted fixture responses for the same reason.
 
 The integration check logs in with the protected admin secret, verifies CSRF and authentication boundaries, checks settings at 100, inserts a temporary synthetic catalog fixture, verifies complete/partial/conditional media responses, and removes that fixture afterwards. `--nas` additionally sends this synthetic fixture through the real helper and tests NAS GET/HEAD/Range using the read-only account; the helper audit and NAS fixture remain, local/catalog test data are removed.
 

@@ -9,7 +9,7 @@ SupplementaryGroups=vm1-backup takaneko-control
 WorkingDirectory=/opt/takaneko/current
 ExecStart=/usr/bin/python3 /opt/takaneko/current/server/worker.py
 Environment=PYTHONDONTWRITEBYTECODE=1
-Environment=TZ=Asia/Tokyo
+Environment=TZ=Asia/Hong_Kong
 Restart=on-failure
 RestartSec=10
 TimeoutStopSec=60
