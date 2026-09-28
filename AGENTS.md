@@ -2,7 +2,7 @@
 
 - Responsible role: Takaneko application maintainer. Shared VM resources remain the VM1 administrator's responsibility.
 - Source: https://github.com/Senachi124/TakanekoFanClubDownloader ; local workspace `C:\Users\Sena\Documents\Git\TakanekoFanClubDownloader`.
-- VM maintenance artifacts: `/home/linuxuser/projects/takaneko/artifacts/`. Existing home files are inventoried in `deployment/vm1/home-inventory.md`; do not move ambiguous/shared files.
+- VM maintenance artifacts: `/home/linuxuser/projects/takaneko/artifacts/`. Historical home files are consolidated under `artifacts/home-legacy-20260928/`; the path mapping is in `deployment/vm1/home-inventory.md` (VM copy: `/home/linuxuser/projects/takaneko/docs/home-inventory.md`). Do not move ambiguous/shared files.
 - Runtime: `/opt/takaneko/current` -> `/opt/takaneko/releases/<revision>`; configuration `/etc/takaneko/`; archive `/var/lib/takaneko/`; login/control state `/var/lib/takaneko-control/`; logs via journal and `/var/log/takaneko/`. No media cache allocated.
 - Read `/home/linuxuser/AGENTS.md` and `/opt/AGENTS.md` before deployment. Read only `SERVICES_DOMAIN` from `/home/linuxuser/.env` when configuring the public domain. Secrets never enter Git, logs or reports.
 - Operations, units, accounts, DB isolation, NAS paths, schedules, verification, retention and rollback: [deployment/vm1/README.md](deployment/vm1/README.md).
