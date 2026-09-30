@@ -10,6 +10,21 @@ import worker
 
 
 class WorkerTests(unittest.TestCase):
+    def test_bridge_progress_does_not_consume_final_response(self):
+        import concurrent.futures
+        import io
+        import threading
+        future=concurrent.futures.Future()
+        future.progress_callback=MagicMock()
+        bridge=object.__new__(worker.Bridge)
+        bridge.lock=threading.Lock()
+        bridge.pending={'fixture':future}
+        bridge.process=MagicMock(stdout=io.StringIO('{"id":"fixture","progress":{"stage":"details"}}\n{"id":"fixture","result":{"folder":"fixture"}}\n'))
+        bridge.read()
+        future.progress_callback.assert_called_once_with({'stage':'details'})
+        self.assertEqual(future.result(),{'folder':'fixture'})
+        self.assertFalse(bridge.pending)
+
     def test_active_job_continues_downloads_after_nas_failure(self):
         commands = iter(['run', 'cancel'])
         updates = []

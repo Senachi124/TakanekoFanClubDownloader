@@ -8,7 +8,8 @@ for(const entry of ['src/main/preload.js','server/local-reader/index.js','src/sh
 if(process.argv.includes('--packages')) {
   const asar=require('@electron/asar');let checked=0;
   const walk=dir=>{for(const entry of fs.readdirSync(dir,{withFileTypes:true})){const file=path.join(dir,entry.name);if(entry.isDirectory())walk(file);else if(entry.name==='app.asar'){
-    const files=asar.listPackage(file);for(const name of files)assert.ok(!/\/(?:\.private-v2|deployment|exported|\.backup-state)\/|deployment-access|session\.json|admin-password/.test(name),name);
+    const files=asar.listPackage(file).map(name=>name.replace(/\\/g,'/'));for(const name of files)assert.ok(!/\/(?:\.private-v2|deployment|exported|\.backup-state)\/|deployment-access|session\.json|admin-password/.test(name),name);
+    for(const name of files)assert.ok(/^\/(?:src|server|node_modules)(?:\/|$)|^\/(?:package.json|README.md|LICENSE)$/.test(name),name);
     for(const name of files.filter(n=>n.startsWith('/server/')))assert.ok(name==='/server/local-reader'||name.startsWith('/server/local-reader/'),name);
     const packed=JSON.parse(asar.extractFile(file,'package.json'));assert.equal(packed.version,pkg.version);checked++;
   }}};
