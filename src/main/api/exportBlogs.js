@@ -1,5 +1,6 @@
 // src/main/api/exportBlogs.js
 const net = require('../utils/network');
+const { downloadToFile } = require('./downloadToFile');
 const cheerio = require('cheerio');
 const fs = require('fs').promises;
 const fsSync = require('fs');
@@ -32,25 +33,6 @@ function httpGet(url, headers = {}) {
       });
     });
     request.on('error', (err) => { clearTimeout(timer); reject(err); });
-    request.end();
-  });
-}
-
-/**
- * Helper: Download binary files (images/attachments)
- */
-function downloadBinary(url, headers = {}) {
-  return new Promise((resolve, reject) => {
-    const request = net.request(url);
-    Object.entries(headers).forEach(([k, v]) => request.setHeader(k, v));
-
-    const chunks = [];
-    request.on('response', (response) => {
-      if (response.statusCode !== 200) return reject(new Error(`HTTP ${response.statusCode}`));
-      response.on('data', chunk => chunks.push(chunk));
-      response.on('end', () => resolve(Buffer.concat(chunks)));
-    });
-    request.on('error', reject);
     request.end();
   });
 }
@@ -261,9 +243,8 @@ async function handleBackupTopicsBlogs(token, rootPath, state, onProgress, selec
 
       if (!fsSync.existsSync(localPath)) {
         try {
-          const buffer = await downloadBinary(fullUrl);
-          await fs.writeFile(localPath, buffer);
-          await fs.writeFile(galleryPath, buffer);
+          await downloadToFile(fullUrl, localPath);
+          await fs.copyFile(localPath, galleryPath);
         } catch (e) {
           hasDownloadError = true;
           console.warn(`[Blog Backup] Image download failed (${fullUrl}): ${e.message}`);

@@ -14,7 +14,7 @@ class WorkerTests(unittest.TestCase):
         commands = iter(['run', 'cancel'])
         updates = []
         def query(sql, params=(), one=False):
-            if sql.startswith('SELECT * FROM settings'): return {'concurrency':1,'blogs':False}
+            if sql.startswith('SELECT * FROM settings'): return {'concurrency':1,'blogs':False,'gallery':True,'movies':True}
             if sql.startswith('SELECT resource_key'): return []
             if sql.startswith('SELECT command'): return {'command':next(commands)}
             if sql.startswith('SELECT 1 FROM posts'): return {'failed':1}

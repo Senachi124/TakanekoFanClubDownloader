@@ -48,6 +48,12 @@ class ArchiveLayoutTests(unittest.TestCase):
         post['body'] = 'No source date'
         self.assertIn('unknown-date', layout.readable_folder(post).parts)
 
+    def test_official_media_has_distinct_readable_categories(self):
+        post,_=self.fixture(Path('unused'),local=False)
+        for kind,category in [('gallery','gallery'),('movie','movies')]:
+            post['kind']=kind
+            self.assertEqual(layout.readable_folder(post).parts[3],category)
+
     def test_move_preserves_bytes_media_identity_nas_and_backup_manifest(self):
         with tempfile.TemporaryDirectory() as tmp, self.roots(Path(tmp)), \
              patch.object(migration.backup,'claim',return_value={'action':'download','lease_token':'fixture'}) as claim, \

@@ -4,14 +4,18 @@ const fs = require('fs/promises');
 const path = require('path');
 const output = process.stdout.write.bind(process.stdout);
 const write = value => output(JSON.stringify(value) + '\n');
-process.stdout.write = () => true;
-console.log = console.warn = console.error = () => {};
+if (require.main === module) {
+  process.stdout.write = () => true;
+  console.log = console.warn = console.error = () => {};
+}
 const { handleGetAllPosts } = require('../src/main/api/getAllPosts');
 const { processSinglePost } = require('../src/main/api/exportPosts');
 const { handleBackupTopicsBlogs } = require('../src/main/api/exportBlogs');
+const { handleBackupGallery } = require('../src/main/api/exportGallery');
+const { handleBackupMovies } = require('../src/main/api/exportMovies');
 
 async function json(url, token) {
-  const r = await fetch(url, { headers: { Authorization: token }, signal: AbortSignal.timeout(30000) });
+  const r = await fetch(url, { headers: { Authorization: token.startsWith('Bearer ') ? token : `Bearer ${token}` }, signal: AbortSignal.timeout(30000) });
   if (!r.ok) throw new Error(`Fanclub HTTP ${r.status}`);
   return r.json();
 }
@@ -30,11 +34,24 @@ async function run(input) {
         items.push(...r.articleList.map(p => ({ kind: 'blog', id: String(p.id), title: p.title || '' })));
       }
     }
+    for (const [enabled,kind,listName] of [[input.gallery,'gallery','galleryAlbumList'],[input.movies,'movie','movieList']]) {
+      if (!enabled) continue;
+      const endpoint = kind === 'gallery' ? 'getGalleryAlbumList' : 'getMovieList';
+      for (let page=1,pages=1; page<=pages; page++) {
+        const result=await json(`https://api.takanekofc.com/${kind}/queries/${endpoint}?page=${page}&pageSize=20`,input.token);
+        if (!Array.isArray(result[listName])) throw new Error(`Invalid ${kind} list`);
+        pages=result.totalPages || 1;
+        items.push(...result[listName].map(item=>({kind,id:String(item.id),title:item.title || ''})));
+      }
+    }
     return items;
   }
   if (input.action !== 'download') throw new Error('Unknown operation');
   const item = input.item;
-  if (item.kind === 'blog') {
+  if (item.kind === 'gallery' || item.kind === 'movie') {
+    const exporter = item.kind === 'gallery' ? handleBackupGallery : handleBackupMovies;
+    await exporter(input.token,input.directory,{},null,item);
+  } else if (item.kind === 'blog') {
     await handleBackupTopicsBlogs(input.token, input.directory, {}, null, item);
   } else {
     const data = await json('https://api.takanekofc.com/auth/notifications/' + encodeURIComponent(item.id), input.token);
@@ -56,7 +73,7 @@ async function run(input) {
   throw new Error('Download incomplete');
 }
 
-readline.createInterface({ input: process.stdin }).on('line', line => {
+if (require.main === module) readline.createInterface({ input: process.stdin }).on('line', line => {
   let input;
   try { input = JSON.parse(line); } catch { return; }
   run(input).then(result => write({ id: input.requestId, result })).catch(error => {
@@ -64,3 +81,4 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
     write({ id: input.requestId, error: http ? `Fanclub HTTP ${http[1]}` : 'Download failed; retry or check Fanclub token.' });
   });
 });
+module.exports = { run };

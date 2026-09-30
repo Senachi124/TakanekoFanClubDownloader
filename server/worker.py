@@ -163,7 +163,7 @@ def run_job(bridge, job):
     job_id = job['id']
     settings = query('SELECT * FROM settings WHERE id=1', one=True)
     token = get_token()
-    items = bridge.call(action='list', token=token, blogs=settings['blogs'])
+    items = bridge.call(action='list', token=token, blogs=settings['blogs'], gallery=settings['gallery'], movies=settings['movies'])
     items = list({(i['kind'], i['id']): i for i in items}.values())
     verified = {row['resource_key'] for row in query('SELECT resource_key FROM posts WHERE nas_available')}
     total = len(items)

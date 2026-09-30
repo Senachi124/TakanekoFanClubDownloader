@@ -170,6 +170,8 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == '/api/settings':
                 concurrency = int(data['concurrency'])
                 if not 1 <= concurrency <= 100 or not isinstance(data['blogs'], bool): raise ValueError('Settings')
+                for name in ('gallery','movies'):
+                    if name in data and not isinstance(data[name],bool): raise ValueError('Settings')
                 token = str(data.get('token', '')).strip()
                 if token:
                     if len(token) > 8192 or '\n' in token or '\r' in token: raise ValueError('Token')
@@ -177,7 +179,8 @@ class Handler(BaseHTTPRequestHandler):
                     fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o640)
                     with os.fdopen(fd, 'w') as stream: stream.write(token)
                     temp.replace(CONTROL / 'token')
-                query('UPDATE settings SET concurrency=%s,blogs=%s WHERE id=1', (concurrency, data['blogs']))
+                query('UPDATE settings SET concurrency=%s,blogs=%s,gallery=COALESCE(%s,gallery),movies=COALESCE(%s,movies) WHERE id=1',
+                      (concurrency,data['blogs'],data.get('gallery'),data.get('movies')))
                 return self.respond(200, {'ok': True})
             if self.path == '/api/import-cookies':
                 try: save_import(data.get('content'), data.get('refreshToken'))

@@ -26,7 +26,7 @@ def readable_folder(post):
     time = date.strftime('%H%M%S') if date else 'unknown-time'
     key = hashlib.sha256(post['resource_key'].encode()).hexdigest()[:12]
     title = component(post['title'])
-    category = 'blogs' if post['kind'] == 'blog' else 'posts'
+    category = {'blog':'blogs','gallery':'gallery','movie':'movies'}.get(post['kind'],'posts')
     return Path('complete') / 'members' / component(post['member'], 72) / category / day / f'{time}_{title}__{key}-v{post["version"][:12]}' / 'files'
 
 

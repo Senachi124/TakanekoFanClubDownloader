@@ -40,6 +40,8 @@ def initialize():
           id integer PRIMARY KEY CHECK(id=1), concurrency integer NOT NULL DEFAULT 5 CHECK(concurrency BETWEEN 1 AND 100),
           blogs boolean NOT NULL DEFAULT true);
         INSERT INTO settings(id) VALUES(1) ON CONFLICT DO NOTHING;
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS gallery boolean NOT NULL DEFAULT true;
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS movies boolean NOT NULL DEFAULT true;
         ALTER TABLE settings ADD COLUMN IF NOT EXISTS auto_enabled boolean NOT NULL DEFAULT true;
         ALTER TABLE settings ADD COLUMN IF NOT EXISTS auto_interval_hours integer NOT NULL DEFAULT 6 CHECK(auto_interval_hours BETWEEN 1 AND 168);
         ALTER TABLE settings ADD COLUMN IF NOT EXISTS auto_next_at timestamptz DEFAULT now();

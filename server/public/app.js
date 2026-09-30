@@ -44,6 +44,7 @@ async function refresh() {
   $('tokenState').textContent = data.hasToken ? '已匯入登入資料' : '尚未匯入登入資料';
   if (!document.activeElement.closest('#settingsForm')) {
     $('concurrency').value = data.settings.concurrency; $('blogs').checked = data.settings.blogs;
+    $('gallery').checked = data.settings.gallery; $('movies').checked = data.settings.movies;
   }
   job = data.job;
   const active = job && ['queued', 'running', 'paused'].includes(job.status);
@@ -203,7 +204,7 @@ $('loginForm').addEventListener('submit', async event => {
 $('logout').addEventListener('click', action(async () => { await api('/api/logout', {}); showLogin(); }));
 $('settingsToggle').addEventListener('click', () => { $('settings').hidden = !$('settings').hidden; });
 $('settingsForm').addEventListener('submit', action(async () => {
-  await api('/api/settings', { concurrency: Number($('concurrency').value), blogs: $('blogs').checked });
+  await api('/api/settings', { concurrency: Number($('concurrency').value), blogs: $('blogs').checked, gallery: $('gallery').checked, movies: $('movies').checked });
   notice('設定已儲存。'); await refresh();
 }));
 const exportCode = `(()=>{if(location.hostname!=='takanekofc.com')throw Error('請在 Fanclub 官網執行');const data={cookies:document.cookie.split('; ').filter(Boolean).map(c=>{const i=c.indexOf('=');return {domain:location.hostname,path:'/',name:c.slice(0,i),value:c.slice(i+1)}}),origins:[{origin:location.origin,localStorage:[{name:'refreshToken',value:localStorage.getItem('refreshToken')||sessionStorage.getItem('refreshToken')}].filter(x=>x.value)}]};if(!data.origins[0].localStorage.length)throw Error('請先登入 Fanclub');const u=URL.createObjectURL(new Blob([JSON.stringify(data)],{type:'application/json'}));const a=document.createElement('a');a.href=u;a.download='takaneko-login.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)})()`;

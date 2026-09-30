@@ -411,7 +411,10 @@ ipcMain.handle('step-3-export-files', async (event, postDetails, requestedConcur
   return exportedPath;
 });
 
+// Manager Blogs, Gallery & Movie IPC Handlers
 const { handleBackupTopicsBlogs } = require('./api/exportBlogs');
+const { handleBackupGallery } = require('./api/exportGallery');
+const { handleBackupMovies } = require('./api/exportMovies');
 
 ipcMain.handle('step-blogs-export', async (event) => {
   const token = store.get('token');
@@ -422,6 +425,32 @@ ipcMain.handle('step-blogs-export', async (event) => {
       step: 'exportPosts',
       progress: Math.round((current / total) * 100),
       message: `Saving Manager Blogs: ${current}/${total}`
+    });
+  });
+});
+
+ipcMain.handle('step-gallery-export', async (event) => {
+  const token = store.get('token');
+  if (!token) return;
+  const exportedPath = path.join(app.getPath('userData'), 'exported');
+  await handleBackupGallery(token, exportedPath, exportState, (current, total) => {
+    event.sender.send('export-progress', {
+      step: 'exportPosts',
+      progress: Math.round((current / total) * 100),
+      message: `Saving FC Gallery: ${current}/${total}`
+    });
+  });
+});
+
+ipcMain.handle('step-movies-export', async (event) => {
+  const token = store.get('token');
+  if (!token) return;
+  const exportedPath = path.join(app.getPath('userData'), 'exported');
+  await handleBackupMovies(token, exportedPath, exportState, (current, total) => {
+    event.sender.send('export-progress', {
+      step: 'exportPosts',
+      progress: Math.round((current / total) * 100),
+      message: `Saving FC Movies: ${current}/${total}`
     });
   });
 });

@@ -29,4 +29,10 @@ function request(url) {
   return req;
 }
 
-module.exports = process.versions.electron ? require('electron').net : { request };
+module.exports = process.versions.electron ? require('electron').net : {
+  request,
+  fetch(url, options) {
+    if (new URL(url).protocol !== 'https:') throw new Error('HTTPS required');
+    return globalThis.fetch(url, options);
+  }
+};
