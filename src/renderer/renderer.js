@@ -1,12 +1,15 @@
 const $=id=>document.getElementById(id), api=window.takaneko.invoke, UI=window.TakanekoUI;
 let view='downloads',offset=0,serial=0,paused=false,running=false,rows=[],mediaIndex=-1,lastProgress=null;
+let indexing=0;
+function indexingState(delta){indexing+=delta;const active=indexing>0;$('scanProgress').hidden=!active;$('collection').setAttribute('aria-busy',String(active));$('refresh').disabled=$('choose').disabled=active;}
 const readerMode=()=>view==='reader'?'reader':'local';
 function notice(text){$('notice').hidden=!text;$('notice').textContent=text;}
 async function loginStatus(){const yes=await api('get-login-status');$('loginStatus').textContent=yes?'已登入':'尚未登入';$('start').disabled=running||!yes;}
 function busy(active){running=active;$('start').disabled=active;$('pause').disabled=$('stop').disabled=!active;}
 async function save(){const value={concurrency:Number($('concurrency').value),blogs:$('blogs').checked,gallery:$('gallery').checked,movies:$('movies').checked};const saved=await api('save-v2-settings',value);$('concurrency').value=saved.concurrency;}
 async function load(scan=false){
-  const request=++serial,mode=readerMode();$('scanStatus').textContent='正在索引';
+  const request=++serial,mode=readerMode();indexingState(1);
+  try {
   if(scan)await api('reader-scan',mode);
   const result=await api('reader-query',mode,{member:$('member').value,kind:$('kind').value,type:$('mode').value,multimedia:$('mode').value!=='posts',offset});
   if(request!==serial)return;
@@ -21,6 +24,7 @@ async function load(scan=false){
     card.onclick=()=>row.mime?showMedia(index):showPost(row.key);$('posts').append(card);
   });
   $('previous').disabled=offset===0;$('next').disabled=!result.hasMore;$('count').textContent=`${rows.length?offset+1:0}–${offset+rows.length} / ${result.total}`;
+  } catch(error){if(request===serial)$('scanStatus').textContent='無法讀取資料夾';throw error;} finally {indexingState(-1);}
 }
 function mediaElement(item){if(!item.available){const p=document.createElement('p');p.textContent='未能讀取';return p;}const element=document.createElement(item.mime.startsWith('video/')?'video':'img');element.src=item.url;if(element.tagName==='VIDEO'){element.controls=true;element.preload='metadata';}else element.alt='';return element;}
 async function showPost(key){const post=await api('reader-detail',readerMode(),key);if(!post)return;$('detailTitle').textContent=post.title;$('detailBody').textContent=post.body;$('detailMedia').replaceChildren(...post.media.map(mediaElement));for(const id of ['mediaPrevious','mediaNext','mediaPost'])$(id).hidden=true;if(!$('detail').open)$('detail').showModal();}
@@ -30,9 +34,9 @@ $('login').onclick=()=>api('open-login');$('capture').onclick=async()=>{$('captu
 $('settingsForm').onsubmit=async event=>{event.preventDefault();await save();notice('設定已儲存');};
 $('start').onclick=async()=>{await save();busy(true);paused=false;$('pause').textContent='暫停';notice('處理中');try{const result=await api('start-download');notice(result.status==='completed'?'已完成':result.status==='cancelled'?'已停止':'需要重新登入或重試');}finally{busy(false);await loginStatus();}};
 $('pause').onclick=async()=>{paused=!paused;await api(paused?'control-pause':'control-resume');$('pause').textContent=paused?'繼續':'暫停';};$('stop').onclick=()=>api('control-cancel');$('folder').onclick=()=>api('open-exported-folder');
-$('choose').onclick=async()=>{const result=await api('reader-select');if(result){offset=0;await load();}};$('refresh').onclick=()=>load(true);
+$('choose').onclick=async()=>{indexingState(1);try{const result=await api('reader-select');if(result){offset=0;await load();}}catch{notice('無法讀取資料夾');}finally{indexingState(-1);}};$('refresh').onclick=()=>load(true).catch(()=>notice('無法讀取資料夾'));
 for(const id of ['member','kind','mode'])$(id).onchange=()=>{offset=0;load();};$('previous').onclick=()=>{offset=Math.max(0,offset-48);load();};$('next').onclick=()=>{offset+=48;load();};
 $('close').onclick=()=>$('detail').close();$('detail').onclose=()=>$('detailMedia').replaceChildren();$('mediaPrevious').onclick=()=>showMedia(mediaIndex-1);$('mediaNext').onclick=()=>showMedia(mediaIndex+1);$('mediaPost').onclick=()=>showPost(rows[mediaIndex].key);
 window.takaneko.onProgress(p=>{lastProgress=p;UI.progress($('stages'),p);});window.addEventListener('languagechange',()=>{UI.progress($('stages'),lastProgress);if(['browse','reader'].includes(view))load();});
-setInterval(()=>{if(view==='reader')load(true).catch(()=>notice('無法讀取資料夾'));},60000);
+setInterval(()=>{if(view==='reader' && !indexing)load(true).catch(()=>notice('無法讀取資料夾'));},60000);
 (async()=>{UI.init();UI.progress($('stages'));document.querySelector('[data-view="downloads"]').setAttribute('aria-selected','true');const info=await api('get-app-info');$('version').textContent=`${info.name} v${info.version}`;$('footerVersion').textContent=`v${info.version}`;const settings=await api('get-download-settings');$('concurrency').value=settings.concurrency;for(const key of ['blogs','gallery','movies']){const legacy=localStorage.getItem('backup'+key[0].toUpperCase()+key.slice(1));$(key).checked=settings.needsMigration && legacy!==null?legacy==='true':settings[key];}if(settings.needsMigration)await save();await loginStatus();})();
