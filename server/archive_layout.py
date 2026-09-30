@@ -93,7 +93,7 @@ def write_readme():
 - `record.json`：完整來源 ID、發佈時間、媒體檔名、SHA-256、VM / NAS 位置及可用狀態。
 - `files/`：已保存在 VM 的不可變原檔、原始 index.md 與縮圖，保留原媒體檔名。
 - NAS-only 投稿只有文字與索引；沒有 files/ 不代表遺失，請查 record.json 的 nas_directory / nas_path。
-- NAS 路徑相對於 `\\SENACHINAS\Senachi\vm1`；VM local_path 相對於該份 record.json 所在目錄。
+- NAS 路徑相對於 `使用者設定的 NAS 根目錄`；VM local_path 相對於該份 record.json 所在目錄。
 - 舊桌面縮圖在 VM 保留於共用批次，local_path 可指向 complete/desktop-thumbnails；NAS 可讀目錄整理完成後，縮圖位於各投稿的 previews/。
 
 網頁使用資料庫中的穩定 media ID。請勿手動改名、修改或刪除 files/，以免破壞 checksum 與備份。

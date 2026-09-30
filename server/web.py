@@ -116,12 +116,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def get(self):
         url = urlsplit(self.path)
+        if url.path in ('/shared/ui.js','/shared/web-translations.js'):
+            return self.respond(200,(PUBLIC.parents[1]/'src/shared'/url.path.rsplit('/',1)[-1]).read_bytes(),mime='text/javascript; charset=utf-8')
         if url.path in ('/', '/downloads', '/backup', '/browse', '/library', '/app.js', '/style.css'):
             name = {'/': 'index.html', '/downloads': 'index.html', '/backup':'index.html', '/browse': 'index.html', '/library': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}[url.path]
             mime = {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name]
-            content = (PUBLIC / name).read_bytes()
+            content = (PUBLIC.parents[1]/'src/shared/style.css' if name=='style.css' else PUBLIC/name).read_bytes()
             if name == 'index.html':
-                if not HOME_URL: raise ValueError('Configure TAKANEKO_HOME_URL from home SERVICES_DOMAIN')
+                content = content.replace(b'__VERSION__',json.loads((PUBLIC.parents[1]/'package.json').read_text())['version'].encode())
                 content = content.replace(b'__HOME_URL__',html.escape(HOME_URL,quote=True).encode())
             return self.respond(200, content, mime=mime)
         if url.path == '/healthz': return self.respond(200, {'ok': True})

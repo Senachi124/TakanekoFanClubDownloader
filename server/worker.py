@@ -16,6 +16,7 @@ from common import ROOT, CONTROL, db, query, initialize
 from fanclub_auth import get_token
 from post_dates import publication_date
 from archive_layout import readable_folder, safe_path, refresh_record
+from progress import Progress
 
 sys.path.insert(0, '/opt/vm1-backup')
 import vm1_backup as backup
@@ -39,7 +40,14 @@ class Bridge:
             try:
                 value = json.loads(line)
                 with self.lock:
-                    future = self.pending.pop(value['id'], None)
+                    future = self.pending.get(value['id']) if 'progress' in value else self.pending.pop(value['id'], None)
+                if future and 'progress' in value:
+                    try:
+                        if future.progress_callback: future.progress_callback(value['progress'])
+                    except Exception:
+                        with self.lock: self.pending.pop(value['id'], None)
+                        future.set_exception(RuntimeError('Progress update failed'))
+                    continue
                 if future:
                     if value.get('error'): future.set_exception(RuntimeError(value['error']))
                     else: future.set_result(value['result'])
@@ -49,9 +57,10 @@ class Bridge:
             for future in self.pending.values(): future.set_exception(RuntimeError('Download engine stopped'))
             self.pending.clear()
 
-    def call(self, **value):
+    def call(self, progress_callback=None, **value):
         request_id = uuid.uuid4().hex
         future = concurrent.futures.Future()
+        future.progress_callback = progress_callback
         with self.lock:
             self.pending[request_id] = future
             self.process.stdin.write(json.dumps({**value, 'requestId': request_id}) + '\n')
@@ -111,7 +120,7 @@ def publish(key, item, result, staging):
     return destination
 
 
-def process_item(bridge, token, item, job_id):
+def process_item(bridge, token, item, job_id, progress=None):
     key = f"takaneko:{item['kind']}:{item['id']}:v1"
     existing = query('SELECT folder,nas_available FROM posts WHERE resource_key=%s', (key,), one=True)
     if existing and existing.get('nas_available'):
@@ -142,7 +151,8 @@ def process_item(bridge, token, item, job_id):
     staging.mkdir(parents=True)
     try:
         if shutil.disk_usage(ROOT).free < MIN_FREE: raise RuntimeError('Low disk space; download paused')
-        result = bridge.call(action='download', item=item, token=get_token(), directory=str(staging))
+        result = bridge.call(action='download', item=item, token=get_token(), directory=str(staging),
+                             progress_callback=(lambda event: progress.detail(key) if event.get('stage')=='details' else None) if progress else None)
         if lost.is_set(): raise RuntimeError('Download lease expired')
         destination = publish(key, item, result, staging)
         with BACKUP_SLOTS:
@@ -161,6 +171,8 @@ def process_item(bridge, token, item, job_id):
 
 def run_job(bridge, job):
     job_id = job['id']
+    progress = Progress(job_id, query)
+    progress.save()
     settings = query('SELECT * FROM settings WHERE id=1', one=True)
     token = get_token()
     items = bridge.call(action='list', token=token, blogs=settings['blogs'], gallery=settings['gallery'], movies=settings['movies'])
@@ -169,8 +181,10 @@ def run_job(bridge, job):
     total = len(items)
     items = [item for item in items if f"takaneko:{item['kind']}:{item['id']}:v1" not in verified]
     query("UPDATE jobs SET total=%s,completed=%s,message='下載中',updated_at=now() WHERE id=%s", (total, total-len(items), job_id))
+    progress.listed(total, total-len(items))
     pending = iter(items)
     active = set()
+    identities = {}
     cancelled = False
     with concurrent.futures.ThreadPoolExecutor(max_workers=settings['concurrency']) as pool:
         exhausted = False
@@ -185,16 +199,20 @@ def run_job(bridge, job):
             while not exhausted and not paused and len(active) < settings['concurrency']:
                 item = next(pending, None)
                 if item is None: exhausted = True; break
-                active.add(pool.submit(process_item, bridge, token, item, job_id))
+                future = pool.submit(process_item, bridge, token, item, job_id, progress)
+                identities[future] = f"takaneko:{item['kind']}:{item['id']}:v1"
+                active.add(future)
             if not active:
                 if not exhausted: time.sleep(2)
                 continue
             done, active = concurrent.futures.wait(active, timeout=2, return_when=concurrent.futures.FIRST_COMPLETED)
             for future in done:
                 failed = future.exception() is not None
+                progress.settled(identities.pop(future), failed)
                 query('UPDATE jobs SET completed=completed+1,failed=failed+%s,updated_at=now() WHERE id=%s', (int(failed), job_id))
     row = query('SELECT failed FROM jobs WHERE id=%s', (job_id,), one=True)
     status = 'cancelled' if cancelled else ('failed' if row['failed'] else 'completed')
+    progress.finish(status)
     query('UPDATE jobs SET status=%s,message=%s,updated_at=now() WHERE id=%s',
           (status, '已停止；完成的檔案已保留' if cancelled else ('部分下載失敗，可重試' if row['failed'] else '下載完成'), job_id))
 
@@ -240,6 +258,10 @@ def main():
             run_job(bridge, job)
         except Exception as error:
             message = str(error) if str(error).startswith('Fanclub HTTP ') else '下載失敗；請檢查 Fanclub token 及服務狀態'
+            row = query('SELECT progress FROM jobs WHERE id=%s',(job['id'],),one=True)
+            tracker = Progress(job['id'],query)
+            if row and row.get('progress'): tracker.value = row['progress']
+            tracker.finish('failed')
             query("UPDATE jobs SET status='failed',message=%s,updated_at=now() WHERE id=%s", (message, job['id']))
 
 

@@ -8,75 +8,11 @@ if (require.main === module) {
   process.stdout.write = () => true;
   console.log = console.warn = console.error = () => {};
 }
-const { handleGetAllPosts } = require('../src/main/api/getAllPosts');
-const { processSinglePost } = require('../src/main/api/exportPosts');
-const { handleBackupTopicsBlogs } = require('../src/main/api/exportBlogs');
-const { handleBackupGallery } = require('../src/main/api/exportGallery');
-const { handleBackupMovies } = require('../src/main/api/exportMovies');
-
-async function json(url, token) {
-  const r = await fetch(url, { headers: { Authorization: token.startsWith('Bearer ') ? token : `Bearer ${token}` }, signal: AbortSignal.timeout(30000) });
-  if (!r.ok) throw new Error(`Fanclub HTTP ${r.status}`);
-  return r.json();
-}
-
-async function run(input) {
-  if (input.action === 'list') {
-    const posts = await handleGetAllPosts(input.token);
-    const items = posts.filter(p => p.notificationReservationId).map(p => ({
-      kind: 'post', id: String(p.notificationReservationId), title: p.title || p.subject || ''
-    }));
-    if (input.blogs) {
-      for (let page = 1, pages = 1; page <= pages; page++) {
-        const r = await json(`https://api.takanekofc.com/blog/queries/getArticleList?blogId=topics&page=${page}&categories=nuzufcwpxr5s3iip`, input.token);
-        if (!Array.isArray(r.articleList)) throw new Error('Invalid blog list');
-        pages = r.totalPages || 1;
-        items.push(...r.articleList.map(p => ({ kind: 'blog', id: String(p.id), title: p.title || '' })));
-      }
-    }
-    for (const [enabled,kind,listName] of [[input.gallery,'gallery','galleryAlbumList'],[input.movies,'movie','movieList']]) {
-      if (!enabled) continue;
-      const endpoint = kind === 'gallery' ? 'getGalleryAlbumList' : 'getMovieList';
-      for (let page=1,pages=1; page<=pages; page++) {
-        const result=await json(`https://api.takanekofc.com/${kind}/queries/${endpoint}?page=${page}&pageSize=20`,input.token);
-        if (!Array.isArray(result[listName])) throw new Error(`Invalid ${kind} list`);
-        pages=result.totalPages || 1;
-        items.push(...result[listName].map(item=>({kind,id:String(item.id),title:item.title || ''})));
-      }
-    }
-    return items;
-  }
-  if (input.action !== 'download') throw new Error('Unknown operation');
-  const item = input.item;
-  if (item.kind === 'gallery' || item.kind === 'movie') {
-    const exporter = item.kind === 'gallery' ? handleBackupGallery : handleBackupMovies;
-    await exporter(input.token,input.directory,{},null,item);
-  } else if (item.kind === 'blog') {
-    await handleBackupTopicsBlogs(input.token, input.directory, {}, null, item);
-  } else {
-    const data = await json('https://api.takanekofc.com/auth/notifications/' + encodeURIComponent(item.id), input.token);
-    await processSinglePost({ ...data, notificationReservationId: item.id }, input.directory, true);
-  }
-  // A completion marker must exist before Python can publish any output.
-  for (const member of await fs.readdir(input.directory, { withFileTypes: true })) {
-    if (!member.isDirectory()) continue;
-    for (const post of await fs.readdir(path.join(input.directory, member.name), { withFileTypes: true })) {
-      if (!post.isDirectory() || post.name === 'pictures') continue;
-      const folder = path.join(input.directory, member.name, post.name);
-      try {
-        if ((await fs.readFile(path.join(folder, '.post-id'), 'utf8')).trim() === item.id) {
-          return { folder, member: member.name, title: item.title || post.name };
-        }
-      } catch (error) { if (error.code !== 'ENOENT') throw error; }
-    }
-  }
-  throw new Error('Download incomplete');
-}
-
+const {run} = require('../src/main/api/archiveEngine');
 if (require.main === module) readline.createInterface({ input: process.stdin }).on('line', line => {
   let input;
   try { input = JSON.parse(line); } catch { return; }
-  run(input).then(result => write({ id: input.requestId, result })).catch(error => {
+  run(input, {}, progress => write({id:input.requestId,progress})).then(result => write({ id: input.requestId, result })).catch(error => {
     const http = String(error.message).match(/HTTP (\d{3})/);
     write({ id: input.requestId, error: http ? `Fanclub HTTP ${http[1]}` : 'Download failed; retry or check Fanclub token.' });
   });

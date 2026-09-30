@@ -1,126 +1,70 @@
-# Takaneko Fanclub Downloader
+# Takaneko Fanclub Downloader v2
 
-## VM1 網頁版
+下載 Takaneko Fanclub 投稿、經理人部落格、Gallery 和 Movies，並在本地瀏覽。Local Reader 可讀取本機及已掛載 NAS 的 archive。
 
-瀏覽器入口：[Takaneko Fanclub Archive](https://vm1.learnfromidol.com:2083/)。提供 cookies／登入 JSON 匯入、1–100 並發下載、暫停／繼續／停止、投稿及圖片／影片瀏覽。Fanclub 現行登入需要 localStorage 的 refreshToken，設定頁提供完整登入資料的匯出指令。VM 完成檔可立即讀取，半夜批次傳送並驗證 NAS 副本。
+Takaneko Fanclub の投稿・マネージャーブログ・Gallery・Movies を保存し、ローカルで閲覧できます。Local Reader はローカルとマウント済み NAS のアーカイブに対応します。
 
-部署設定、帳戶隔離、儲存與維運：[deployment/vm1/README.md](deployment/vm1/README.md)。桌面版功能仍保留。
+**日本語は機械翻訳のため、不正確な表現が含まれる場合があります。**
 
-網頁版分為[下載與自動備份](https://vm1.learnfromidol.com:2083/downloads)及[瀏覽內容](https://vm1.learnfromidol.com:2083/browse)。支援直接貼上 cookies，預設每 6 小時自動下載新內容，可在設定中修改或停用。已驗證匯入 NAS 的桌面版投稿會依原始 ID 跳過重複下載。
+僅供具有合法存取權限的使用者使用，請遵守網站條款與著作權。／正規のアクセス権を持つ方のみ利用し、サイト規約と著作権を守ってください。
 
-Takaneko Fanclub 內容下載器。下載 Takaneko Fanclub 的投稿、圖片與 Markdown，並在桌面應用程式中瀏覽。
+## 安裝／インストール
 
-Takaneko Fanclub の投稿・画像・Markdown を保存し、デスクトップアプリで閲覧するためのダウンローダーです。
+在 [Releases](https://github.com/Senachi124/TakanekoFanClubDownloader/releases) 下載 v2.0.0，一般使用者不需 Node.js。／Releases から v2.0.0 を取得します。通常の利用では Node.js は不要です。
 
-> 僅供已取得 Takaneko Fanclub 合法存取權限的使用者使用。請遵守網站條款、著作權與內容使用規範。
->
-> 正規のアクセス権を持つユーザーのみ利用し、サイト規約・著作権・コンテンツ利用規約を遵守してください。
+| 平台／OS | 檔案／ファイル |
+|---|---|
+| Windows x64 安裝版／インストーラー | `Takaneko-Fanclub-Downloader-2.0.0-Windows-x64-Setup.exe` |
+| Windows x64 免安裝／ポータブル | `Takaneko-Fanclub-Downloader-2.0.0-Windows-x64-Portable.exe` |
+| macOS Intel | `Takaneko-Fanclub-Downloader-2.0.0-macOS-x64.dmg` / `.zip` |
+| macOS Apple Silicon | `Takaneko-Fanclub-Downloader-2.0.0-macOS-arm64.dmg` / `.zip` |
 
-## 下載／ダウンロード
+Windows 內附 yt-dlp、ffmpeg 和 ffprobe。macOS 影片下載需要在 PATH 提供這些工具，圖片及 Reader 不需要。Release 附 SHA-256 校驗值；安裝包不含私人帳戶及 archive。
 
-一般使用者不需要安裝 Node.js。請到 [Releases](https://github.com/Senachi124/TakanekoFanClubDownloader/releases) 下載對應作業系統的安裝檔。
+Windows は動画ツールを同梱します。macOS の動画取得には PATH 上の yt-dlp・ffmpeg・ffprobe が必要です。画像と Reader には不要です。Release に SHA-256 を掲載し、個人データは同梱しません。
 
-通常の利用では Node.js のインストールは不要です。[Releases](https://github.com/Senachi124/TakanekoFanClubDownloader/releases) から OS に合うファイルをダウンロードしてください。
+v2 保留 1.2.1 以後的 app ID、名稱及使用者資料位置。1.2.0 以前使用舊名稱 `Takaneko Downloader`，請保留舊資料再自行遷移。
 
-- Windows：下載 `.exe`；`Setup` 版本會安裝到系統，另一個 `.exe` 可直接執行。Windows 版本已內含影片下載所需工具，不需要另外安裝 Node.js、yt-dlp 或 ffmpeg。
-  - Windows：`.exe` をダウンロードします。`Setup` 版はインストール用、もう一方の `.exe` は直接実行できます。動画ダウンロードに必要なツールは同梱されているため、Node.js・yt-dlp・ffmpeg の別途インストールは不要です。
-- macOS：下載 `.dmg` 後拖曳到 Applications；`.zip` 可解壓縮後使用。
-  - macOS：`.dmg` を開いて Applications にコピーします。`.zip` は解凍して使用できます。
+v2 は 1.2.1 以降のアプリ ID・名前・データ領域を維持します。1.2.0 以前の旧名アプリは、元データを保持して必要な移行を行ってください。
 
-### 版本相容性／バージョン互換性
+## 快速使用／使い方
 
-`1.2.0` 及以前的版本使用舊 app 名稱 `Takaneko Downloader`；`1.2.1` 以後改用 `Takaneko Fanclub Downloader`。兩者視為不同 app，安裝新版不會自動取代舊版。若電腦已有舊版，請先手動解除安裝舊 app，再安裝新版。
+1. 在設定 tab 開啟登入視窗，登入 Fanclub，再按「取得 Token」。／設定タブからログインし、「Token を取得」を押します。
+2. 設定並發 1–100，預設 5；選擇 Blogs／Gallery／Movies。影片同時最多 2 個。／並列数は 1–100、既定値 5。対象を選択します。動画は同時に最大 2 件です。
+3. 在下載 tab 開始；三條進度為清單、詳情檢查、媒體下載及保存。／ダウンロードタブから開始し、一覧・詳細確認・保存の進捗を確認します。
+4. 可暫停、繼續或停止；已完成檔案保留，失敗可重試。／一時停止・再開・停止が可能です。完了分は保持し、失敗分を再試行できます。
+5. 「內容瀏覽」顯示本地下載；「本地閱讀器」可選擇其他 archive。／コンテンツ閲覧は取得済み内容、ローカルリーダーは選択フォルダーを表示します。
 
-`1.2.0` 以前のバージョンは旧アプリ名 `Takaneko Downloader`、`1.2.1` 以降は `Takaneko Fanclub Downloader` を使用します。両者は別アプリとして扱われ、新版をインストールしても旧版は自動置換されません。旧版がある場合は、先に旧アプリを手動でアンインストールしてから新版をインストールしてください。
+「繁體中文／日本語」tabs 可切換並記住語言。時間顯示為香港 UTC+08:00、24 小時制；原始發布 metadata、檔名及存檔內容不變。
 
-## 快速使用／クイックスタート
+言語タブの選択を保存します。表示時刻は香港 UTC+08:00 の 24 時間表記です。元の公開日時 metadata・ファイル名・アーカイブは変更しません。
 
-1. 開啟程式，按 Login／ログイン。
-   - アプリを起動し、Login／ログインを押します。
-2. 在內建視窗登入 Takaneko Fanclub，按 Token Capture／トークン取得。
-   - 内蔵ウィンドウで Takaneko Fanclub にログインし、Token Capture／トークン取得を押します。
-3. 在下載卡片設定下載並發數，預設為 5，可設定 1–100。
-   - ダウンロードカードで並列数を設定します。既定値は 5、設定範囲は 1–100 です。
-4. 按 Start Download／ダウンロード開始。
-   - Start Download／ダウンロード開始を押します。
-5. 等待下載完成；需要時可使用 Pause／一時停止、Resume／再開或 Cancel／停止。
-   - 完了まで待ちます。必要に応じて Pause／一時停止、Resume／再開、Cancel／停止を使えます。
-6. 按 Open Folder／フォルダを開く查看檔案，或切換到 Gallery／ギャラリー瀏覽圖片與文章。
-   - Open Folder／フォルダを開くで保存先を開くか、Gallery／ギャラリーで画像と投稿を閲覧します。
+## Local Reader
 
-## 下載流程圖／ダウンロードフローチャート
+選擇本機、外接磁碟或已掛載 NAS 根目錄。支援桌面 `index.md`＋`.post-id`、server `record.json` v1 和 NAS v2；提供成員／分類篩選、48 件分頁、圖片及影片。Reader 開啟時每 60 秒檢查更新，也可手動重新整理。
 
-1. 登入並取得 API token。
-   - ログインして API token を取得します。
-2. 取得所有通知與投稿清單。
-   - 通知と投稿一覧を取得します。
-3. 讀取本機 `.post-id` 索引，跳過已經匯出的投稿。
-   - ローカルの `.post-id` 索引を読み、保存済み投稿をスキップします。
-4. 只抓取新投稿的詳細內容。
-   - 新規投稿の詳細だけを取得します。
-5. 下載圖片並寫入 `index.md`。
-   - 画像を保存し、`index.md` を作成します。
-6. 在 Gallery 顯示已匯出的內容。
-   - Gallery に保存済みコンテンツを表示します。
+ローカル・外付けディスク・マウント済み NAS のルートを選択します。デスクトップ形式、server v1、NAS v2 に対応し、絞り込み・48 件分頁・画像・動画を提供します。表示中は 60 秒ごとに更新を確認します。
 
-```mermaid
-flowchart TD
-    A[啟動程式<br/>アプリ起動] --> B{已有 token？<br/>token あり？}
-    B -- 否／いいえ --> C[登入並擷取 token<br/>ログインして token を取得]
-    B -- 是／はい --> D[取得投稿清單<br/>投稿一覧を取得]
-    C --> D
-    D --> E[讀取本機 .post-id 索引<br/>ローカル索引を読み込む]
-    E --> F{已匯出？<br/>保存済み？}
-    F -- 是／はい --> G[跳過<br/>スキップ]
-    F -- 否／いいえ --> H[取得詳細內容<br/>詳細を取得]
-    H --> I[下載圖片並儲存 Markdown<br/>画像と Markdown を保存]
-    G --> J{還有投稿？<br/>残りあり？}
-    I --> J
-    J -- 是／はい --> F
-    J -- 否／いいえ --> K[完成；開啟 Folder 或 Gallery<br/>完了；Folder または Gallery を開く]
+Reader 不登入伺服器、不下載遠端 archive、不修改來源。索引存於 app 使用者資料目錄。離線時保留索引，缺失媒體顯示不可用。v1 相對連結必須位於所選根目錄內，建議選擇包含完整 `complete/` 的根目錄。
+
+Reader は遠隔ログイン・ダウンロード・元ファイルの変更を行いません。索引はアプリのデータ領域に保存し、切断時も保持します。v1 の相対リンクを読む場合は `complete/` 全体を含むルートを選択してください。
+
+## 資料與開發／データと開発
+
+下載位置為 Electron `userData/exported`，可按「開啟資料夾」。token 及偏好同樣存於使用者資料目錄，不寫入 Git。原有內建登入及 Token Capture 保留，請勿分享登入資料。
+
+保存先は Electron の `userData/exported` です。token と設定もユーザーデータ領域に保存し、Git に含めません。内蔵ログインと Token Capture を維持します。
+
+```sh
+npm ci
+npm start
+npm test
+npm run check:release
+npm run build:win
+# macOS host / macOS 上で実行
+npm run build:mac
 ```
 
-## AIMD 快速檢查／AIMD による高速確認
+桌面及共用功能在 `src/`；Reader adapter 在 `server/local-reader/` 並隨桌面包附上。伺服器、NAS、部署與自動化見 [server/README.md](server/README.md)，一般使用不需部署 server。
 
-AIMD 主要用來快速判斷「這篇投稿是否已經下載過」，不是用來下載內容，也不會取代必要的 API 請求。
-
-AIMD は「その投稿が保存済みか」を高速に判定するための仕組みです。コンテンツをダウンロードする処理ではなく、必要な API リクエストを置き換えるものでもありません。
-
-- 程式先掃描匯出資料夾內的 `.post-id` 檔案，建立已存在投稿的索引。
-  - まず出力フォルダ内の `.post-id` を読み、保存済み投稿の索引を作ります。
-- 檢查從目前並發數開始；成功時逐步增加，遇到檔案 I/O 錯誤時降低並發數，最多 100 個。
-  - 現在の並列数から開始し、成功時は少しずつ増加、ファイル I/O エラー時は減少させます（最大 100 件）。
-- 已存在的投稿會直接跳過詳細查詢與檔案輸出；只有新投稿使用 GUI 設定的並發數（預設 5）。
-  - 保存済み投稿は詳細取得と出力をスキップし、新規投稿だけが GUI 設定値（既定値 5）で処理されます。
-- 舊版本沒有 `.post-id` 的資料會在第一次更新時重新處理一次，之後就能正常跳過。
-  - 旧バージョンで `.post-id` がない投稿は、初回更新時に一度だけ再処理され、以降はスキップできます。
-
-## 匯出內容／出力内容
-
-匯出根目錄是 Electron 的 `userData/exported`，實際位置依作業系統而不同。可使用 Open Folder／フォルダを開く開啟。
-
-出力先は Electron の `userData/exported` です。実際の場所は OS により異なります。Open Folder／フォルダを開くから開けます。
-
-```text
-<userData>/exported/
-├─ <member-name>/
-│  ├─ pictures/
-│  │  ├─ <release-date>_01.jpg
-│  │  └─ ...
-│  └─ <release-date>_<title>/
-│     ├─ index.md
-│     ├─ .post-id
-│     ├─ <release-date>_01.jpg
-│     └─ ...
-└─ ...
-```
-
-`index.md` 包含標題、發送者、日期、文章內容與本機圖片連結。`.post-id` 是程式自動產生的索引檔，請勿手動修改或刪除。
-
-`index.md` にはタイトル、送信者、日付、本文、ローカル画像へのリンクが含まれます。`.post-id` は自動生成される索引ファイルのため、手動で変更・削除しないでください。
-
-## 登入與資料安全／ログインとデータ安全
-
-登入 token 會由 `electron-store` 保存於 Electron 的使用者資料目錄，不會寫入專案資料夾。請勿將 token 分享給他人。
-
-ログイン token は `electron-store` により Electron のユーザーデータディレクトリへ保存され、プロジェクトフォルダには保存されません。token を他人に共有しないでください。
+デスクトップと共通処理は `src/`、同梱 Reader は `server/local-reader/` にあります。サーバー運用は [server/README.md](server/README.md) を参照してください。通常の利用では server は不要です。

@@ -78,6 +78,7 @@ async function handleBackupGallery(token, rootExportPath, state, onProgress, sel
     try {
       const detailUrl = `https://api.takanekofc.com/gallery/queries/getGalleryAlbumDetail/${encodeURIComponent(item.id)}`;
       const detail = await fetchJson(detailUrl, token);
+      state?.onDetails?.();
 
       const releaseStr = formatDateForFilename(detail.displayDate || detail.createdAt);
       const title = detail.title || item.title || 'untitled';
@@ -151,6 +152,7 @@ async function handleBackupGallery(token, rootExportPath, state, onProgress, sel
       await fs.writeFile(path.join(albumFolder, 'index.md'), mdContent, 'utf-8');
       if (incomplete) throw new Error('One or more gallery media downloads failed');
       await fs.writeFile(marker,String(item.id),'utf8');
+      if (selectedItem) return albumFolder;
 
     } catch (err) {
       if (selectedItem || state?.isCancelled) throw err;

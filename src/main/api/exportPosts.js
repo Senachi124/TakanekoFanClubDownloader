@@ -333,6 +333,7 @@ async function processSinglePost(data, rootPath, strict = false) {
       'utf-8'
     );
   }
+  return postDir;
 }
 
 module.exports = { handleExportPosts, processSinglePost };
