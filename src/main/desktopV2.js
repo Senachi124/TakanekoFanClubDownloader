@@ -29,7 +29,11 @@ function setup({store,state,getWindow}) {
     store.set('readerRoot',selection.filePaths[0]);
     ready.reader=readers.reader.select(selection.filePaths[0]); return ready.reader;
   });
-  ipcMain.handle('reader-scan',async(_e,mode)=>(await getReader(mode)).scan());
+  ipcMain.handle('reader-scan',async(_e,mode)=>{
+    mode=mode==='reader'?'reader':'local';
+    const initialized=!!ready[mode], reader=await getReader(mode);
+    return initialized?reader.scan():reader.summary();
+  });
   ipcMain.handle('reader-query',async(_e,mode,options)=>(await getReader(mode)).query(options));
   ipcMain.handle('reader-detail',async(_e,mode,key)=>(await getReader(mode)).detail(key));
   ipcMain.handle('start-download',async()=>{

@@ -62,8 +62,24 @@ class BackupTests(unittest.TestCase):
         conn=MagicMock()
         with patch.object(worker,'query',side_effect=query), patch.object(worker,'prepare',return_value=Path('/fixture')), \
              patch.object(worker,'db',return_value=contextlib.nullcontext(conn)), patch.object(worker,'refresh_record'), \
-             patch.object(worker.backup,'NAS',NAS), patch.object(worker.backup,'send_directory',side_effect=send):
+             patch.object(worker.backup,'NAS',NAS), patch.object(worker.backup,'send_directory',side_effect=send), patch.object(worker,'publish_catalog') as catalog:
             worker.run_job({'id':'backup'})
         self.assertEqual(sum('files_done=files_done+1' in sql for sql,_ in updates),1)
         self.assertTrue(any("status='completed'" in sql for sql,_ in updates))
         self.assertTrue(any('nas_layout_ready=true' in call.args[0] for call in conn.execute.call_args_list))
+        catalog.assert_called_once_with(None, 'manual')
+
+    def test_catalog_failure_is_retried_even_without_remaining_posts(self):
+        updates=[]
+        def query(sql,params=(),one=False):
+            if sql.startswith('SELECT'): return []
+            updates.append((sql,params))
+        with patch.object(worker,'query',side_effect=query), patch.object(worker,'publish_catalog',side_effect=RuntimeError('unavailable')):
+            worker.run_job({'id':'catalog','trigger':'manual'})
+        self.assertTrue(any("status='failed'" in sql for sql,_ in updates))
+        self.assertFalse(any("status='completed'" in sql for sql,_ in updates))
+        updates.clear()
+        with patch.object(worker,'query',side_effect=query), patch.object(worker,'publish_catalog') as publish:
+            worker.run_job({'id':'catalog','trigger':'manual'})
+        publish.assert_called_once_with(None,'manual')
+        self.assertTrue(any("status='completed'" in sql for sql,_ in updates))

@@ -21,12 +21,12 @@ test('reader indexes legacy, VM v1 and NAS v2 without modifying archives; retain
     await add('staging/incomplete',null);
     const reader=new ArchiveReader(cache);await reader.select(root);
     assert.equal(reader.posts.length,3);assert.equal(reader.query({multimedia:true,type:'video'}).total,3);
-    assert.equal(reader.detail('vm').media.length,2);assert.equal(reader.detail('vm').media[1].available,false);
+    assert.equal((await reader.detail('vm')).media.length,2);assert.equal((await reader.detail('vm')).media[1].available,false);
     assert.equal(reader.query().rows[0].title,'中文と日本語');
     const before=await fs.readFile(path.join(root,'日本語/文章/index.md'));
-    const mid=reader.detail('nas').media[0].id;assert.equal((await reader.resolve(mid)).stat.size,7);
+    const mid=(await reader.detail('nas')).media[0].id;assert.equal((await reader.resolve(mid)).stat.size,7);
     await assert.rejects(safeFile(root,path.join(temp,'outside.jpg')),/outside/);
-    await fs.rename(root,root+'-offline');await reader.scan();assert.equal(reader.offline,true);assert.equal(reader.posts.length,3);assert.equal(reader.detail('nas').media[0].available,false);
+    await fs.rename(root,root+'-offline');await reader.scan();assert.equal(reader.offline,true);assert.equal(reader.posts.length,3);assert.equal((await reader.detail('nas')).media[0].available,false);
     await fs.rename(root+'-offline',root);await reader.scan();assert.equal(reader.offline,false);
     assert.deepEqual(await fs.readFile(path.join(root,'日本語/文章/index.md')),before);
     const restored=new ArchiveReader(cache);await restored.select(root);assert.equal(restored.posts.length,3);

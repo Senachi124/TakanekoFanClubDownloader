@@ -3,6 +3,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const {loadCatalog} = require('./catalog');
 const id = value => crypto.createHash('sha256').update(value).digest('hex');
 const mime = file => ({'.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.gif':'image/gif','.webp':'image/webp','.mp4':'video/mp4','.webm':'video/webm','.mov':'video/quicktime'}[path.extname(file).toLowerCase()]);
 const inside = (root, file) => { const rel = path.relative(root, file); return rel === '' || (!rel.startsWith('..' + path.sep) && rel !== '..' && !path.isAbsolute(rel)); };
@@ -26,7 +27,7 @@ class ArchiveReader {
   constructor(cacheDirectory) { this.cacheDirectory = cacheDirectory; this.root = ''; this.posts = []; this.media = new Map(); this.busy = null; this.offline = false; }
   async select(root) {
     if (this.busy) await this.busy;
-    this.root = path.resolve(root); this.posts = []; this.media.clear();
+    this.root = path.resolve(root); this.posts = []; this.media.clear(); this.source = 'scan'; this.warnings = 0;
     try { this.root = await fs.realpath(this.root); } catch { /* Retain offline mount selection. */ }
     this.cachePath = path.join(this.cacheDirectory, id(this.root) + '.json');
     try { const cache = JSON.parse(await fs.readFile(this.cachePath, 'utf8')); this.posts = cache.posts; this.media = new Map(cache.media); } catch { /* First use. */ }
@@ -39,6 +40,22 @@ class ArchiveReader {
   }
   async performScan() {
     if (!this.root) return this.summary();
+    try {
+      await fs.access(this.root);
+      const catalog = await loadCatalog(this.root, safeFile, mime);
+      if (catalog) {
+        this.posts = catalog.posts.sort((a,b)=>(b.date || '').localeCompare(a.date || '') || a.key.localeCompare(b.key));
+        this.media = catalog.media; this.offline = false; this.warnings = 0; this.source = 'catalog';
+        await this.saveCache();
+        return this.summary();
+      }
+    } catch {
+      // A bad or partially mounted catalog never triggers a costly recursive NAS scan.
+      this.warnings = 1;
+      try { await fs.access(this.root); this.offline = false; } catch { this.offline = true; }
+      return this.summary();
+    }
+    this.source = 'scan';
     const posts = new Map(), media = new Map(); let failures = 0;
     try {
       await fs.readdir(this.root);
@@ -84,21 +101,36 @@ class ArchiveReader {
       if (failures) for (const old of this.posts) if (!posts.has(old.key)) { posts.set(old.key, old); for (const mid of old.media) if (this.media.has(mid)) media.set(mid,{...this.media.get(mid),available:false}); }
       this.posts = [...posts.values()].sort((a,b) => (b.date || '').localeCompare(a.date || '') || a.key.localeCompare(b.key));
       this.media = media; this.offline = false; this.warnings = failures;
-      await fs.mkdir(this.cacheDirectory,{recursive:true});
-      await fs.writeFile(this.cachePath + '.tmp', JSON.stringify({posts:this.posts,media:[...this.media]}));
-      await fs.rename(this.cachePath + '.tmp',this.cachePath);
+      await this.saveCache();
     } catch { this.offline = true; }
     return this.summary();
   }
-  summary() { return {root:this.root, count:this.posts.length, offline:this.offline, warnings:this.warnings || 0}; }
+  async saveCache() {
+    await fs.mkdir(this.cacheDirectory,{recursive:true});
+    await fs.writeFile(this.cachePath + '.tmp', JSON.stringify({posts:this.posts,media:[...this.media]}));
+    await fs.rename(this.cachePath + '.tmp',this.cachePath);
+  }
+  summary() { return {root:this.root, count:this.posts.length, offline:this.offline, warnings:this.warnings || 0, source:this.source}; }
   query({member='',kind='',type='all',offset=0,multimedia=false} = {}) {
     const selected = this.posts.filter(p => (!member || p.member===member) && (!kind || p.kind===kind));
-    const rows = multimedia ? selected.flatMap(p => p.media.map(mid=>this.publicMedia(mid)).filter(m=>m.variant==='original' && (type==='all' || m.mime.startsWith(type+'/'))).map(m=>({...m,title:p.title,member:p.member,date:p.date,key:p.key}))) : selected.map(({body,media,...p})=>({...p,cover:media.map(mid=>this.publicMedia(mid)).find(m=>m.mime.startsWith('image/') && m.available)?.url || null}));
+    const rows = multimedia ? selected.flatMap(p => p.media.map(mid=>this.publicMedia(mid)).filter(m=>m.variant==='original' && (type==='all' || m.mime.startsWith(type+'/'))).map(m=>({...m,title:p.title,member:p.member,date:p.date,key:p.key}))) : selected.map(({body,media,textFilename,...p})=>({...p,cover:media.map(mid=>this.publicMedia(mid)).find(m=>m.mime.startsWith('image/') && m.available)?.url || null}));
     offset = Math.max(0, Number(offset) || 0);
     return {...this.summary(), rows:rows.slice(offset,offset+48), total:rows.length, hasMore:offset+48<rows.length, members:[...new Set(this.posts.map(p=>p.member))].sort()};
   }
   publicMedia(mid) { const {filename,...entry} = this.media.get(mid); return {...entry,available:!this.offline && entry.available,url:`archive://media/${mid}`}; }
-  detail(key) { const post = this.posts.find(p=>p.key===key); return post ? {...post,media:post.media.map(mid=>this.publicMedia(mid)).filter(m=>m.variant==='original')} : null; }
+  async detail(key) {
+    const post = this.posts.find(p=>p.key===key); if (!post) return null;
+    const {textFilename,...result} = post;
+    if (textFilename) {
+      try { result.body = await fs.readFile((await safeFile(this.root,textFilename)).file,'utf8'); result.bodyAvailable = true; }
+      catch { result.body = ''; result.bodyAvailable = false; }
+      await Promise.all(post.media.map(async mid=>{
+        const item=this.media.get(mid);
+        try { item.available=(await safeFile(this.root,item.filename)).stat.size>0; } catch { item.available=false; }
+      }));
+    }
+    return {...result,media:post.media.map(mid=>this.publicMedia(mid)).filter(m=>m.variant==='original')};
+  }
   async resolve(mid) { const item=this.media.get(mid); if (!item) throw new Error('Unknown media'); return {...await safeFile(this.root,item.filename),mime:item.mime}; }
 }
 module.exports = {ArchiveReader,safeFile,inside,dateFromBody};

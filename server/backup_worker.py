@@ -10,6 +10,7 @@ import time
 import uuid
 from common import ROOT, db, query, initialize
 from archive_layout import safe_path, refresh_record
+from reader_catalog import publish_catalog
 import backup_window as window
 from datetime import timedelta
 sys.path.insert(0, '/opt/vm1-backup')
@@ -142,7 +143,14 @@ def run_job(job, deadline=None):
                 if job.get('trigger') == 'scheduled': defer(job_id, retry=True)
                 else: query("UPDATE backup_jobs SET status='failed',failed=failed+1,message='NAS 備份未完成；本機內容保留，可手動重試。下載繼續運作。',updated_at=now() WHERE id=%s",(job_id,))
                 return
-        query("UPDATE backup_jobs SET status='completed',current_item='',message=%s,updated_at=now() WHERE id=%s",('NAS 備份及回讀校驗完成' if posts else '沒有待備份內容',job_id))
+        try:
+            query("UPDATE backup_jobs SET current_item='',message='正在發布 Reader 共用索引',updated_at=now() WHERE id=%s", (job_id,))
+            publish_catalog(deadline, job.get('trigger', 'manual'))
+        except Exception:
+            if job.get('trigger') == 'scheduled': defer(job_id, retry=True)
+            else: query("UPDATE backup_jobs SET status='failed',failed=failed+1,message='內容已保留；共用索引發布失敗，可重試',updated_at=now() WHERE id=%s", (job_id,))
+            return
+        query("UPDATE backup_jobs SET status='completed',current_item='',message=%s,updated_at=now() WHERE id=%s",('NAS 備份、校驗及共用索引完成' if posts else '共用索引已更新；沒有待備份內容',job_id))
     finally: backup.NAS = original_nas
 
 
@@ -214,7 +222,10 @@ def serve():
 
 
 if __name__ == '__main__':
-    if '--job' in sys.argv:
+    if '--catalog-only' in sys.argv:
+        # Explicit maintainer operation, publishes metadata only; no backup job is enqueued.
+        print(publish_catalog(trigger='manual'))
+    elif '--job' in sys.argv:
         job = query('SELECT * FROM backup_jobs WHERE id=%s',(sys.argv[sys.argv.index('--job')+1],),one=True)
         deadline = None
         if job['trigger']=='scheduled':

@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const pkg=require('../package.json'),lock=require('../package-lock.json');
-assert.equal(pkg.version,'2.0.0');assert.equal(lock.version,pkg.version);assert.equal(lock.packages[''].version,pkg.version);
+assert.match(pkg.version,/^2\.\d+\.\d+$/);assert.equal(lock.version,pkg.version);assert.equal(lock.packages[''].version,pkg.version);
 assert.equal(pkg.build.appId,'com.takaneko.downloader');assert.equal(pkg.productName,'Takaneko Fanclub Downloader');
 assert.deepEqual(pkg.build.files,['src/**/*','server/local-reader/**/*','package.json','README.md','LICENSE','!**/*.test.js']);
 for(const entry of ['src/main/preload.js','server/local-reader/index.js','src/shared/ui.js','src/shared/style.css'])assert.ok(fs.existsSync(entry),entry);

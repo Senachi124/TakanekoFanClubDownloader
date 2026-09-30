@@ -10,14 +10,14 @@ Takaneko Fanclub の投稿・マネージャーブログ・Gallery・Movies を�
 
 ## 安裝／インストール
 
-在 [Releases](https://github.com/Senachi124/TakanekoFanClubDownloader/releases) 下載 v2.0.0，一般使用者不需 Node.js。／Releases から v2.0.0 を取得します。通常の利用では Node.js は不要です。
+在 [Releases](https://github.com/Senachi124/TakanekoFanClubDownloader/releases) 下載 v2.0.1，一般使用者不需 Node.js。／Releases から v2.0.1 を取得します。通常の利用では Node.js は不要です。
 
 | 平台／OS | 檔案／ファイル |
 |---|---|
-| Windows x64 安裝版／インストーラー | `Takaneko-Fanclub-Downloader-2.0.0-Windows-x64-Setup.exe` |
-| Windows x64 免安裝／ポータブル | `Takaneko-Fanclub-Downloader-2.0.0-Windows-x64-Portable.exe` |
-| macOS Intel | `Takaneko-Fanclub-Downloader-2.0.0-macOS-x64.dmg` / `.zip` |
-| macOS Apple Silicon | `Takaneko-Fanclub-Downloader-2.0.0-macOS-arm64.dmg` / `.zip` |
+| Windows x64 安裝版／インストーラー | `Takaneko-Fanclub-Downloader-2.0.1-Windows-x64-Setup.exe` |
+| Windows x64 免安裝／ポータブル | `Takaneko-Fanclub-Downloader-2.0.1-Windows-x64-Portable.exe` |
+| macOS Intel | `Takaneko-Fanclub-Downloader-2.0.1-macOS-x64.dmg` / `.zip` |
+| macOS Apple Silicon | `Takaneko-Fanclub-Downloader-2.0.1-macOS-arm64.dmg` / `.zip` |
 
 Windows 內附 yt-dlp、ffmpeg 和 ffprobe。macOS 影片下載需要在 PATH 提供這些工具，圖片及 Reader 不需要。Release 附 SHA-256 校驗值；安裝包不含私人帳戶及 archive。
 
@@ -40,6 +40,10 @@ v2 は 1.2.1 以降のアプリ ID・名前・データ領域を維持します�
 言語タブの選択を保存します。表示時刻は香港 UTC+08:00 の 24 時間表記です。元の公開日時 metadata・ファイル名・アーカイブは変更しません。
 
 ## Local Reader
+
+v2.0.1 優先讀取伺服器在 NAS 校驗完成後發布的共用 `catalog.json`，不逐一遍歷投稿資料夾。內文和媒體在開啟時讀取，索引期間顯示動畫進度列。可選 `members/`、`media/`、`takaneko/` 或包含 `takaneko/` 的根目錄。請保留 `.catalog/`；NAS 更新結束後最遲於下次 60 秒檢查载入新清單。沒有 catalog 的舊 archive 仍使用掃描。
+
+v2.0.1 は NAS 検証後の共通 `catalog.json` を優先し、投稿フォルダーの全走査を省きます。本文・メディアは開くときに読み込み、索引中は進捗バーを表示します。`members/`、`media/`、`takaneko/`、または `takaneko/` を含むルートを選択し、`.catalog/` を保持してください。更新は次の 60 秒確認で反映されます。catalog のない旧形式は従来どおり走査します。
 
 選擇本機、外接磁碟或已掛載 NAS 根目錄。支援桌面 `index.md`＋`.post-id`、server `record.json` v1 和 NAS v2；提供成員／分類篩選、48 件分頁、圖片及影片。Reader 開啟時每 60 秒檢查更新，也可手動重新整理。
 
