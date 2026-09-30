@@ -46,6 +46,7 @@ __pycache__/
 .backup-state/
 
 # Private maintainer notes and runtime configuration
+AGENTS.md
 .private-v2/
 server/private/
 *.sqlite*
