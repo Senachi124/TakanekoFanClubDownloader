@@ -58,6 +58,8 @@ npm run check:release
 
 新規導入は管理者設定後に `install.sh` を使用します。既存ホストは `upgrade.sh RELEASE` でアイドル時に移行・切り替えを実施し、このアプリだけ復帰します。個別設定とデータは release 外に保持します。
 
-v2 僅新增 `jobs.progress` 欄位，保留舊欄位。回滾切回上一個相容 release，重啟本應用，不刪資料。部署後驗證 HTTPS、登入、媒體 GET／HEAD／Range、排程及啟用狀態，更新本應用備份登記與私人 home 索引。
+v2 新增 `jobs.progress`，v2.0.1 新增 `jobs.errors` 欄位，保留舊欄位。回滾切回上一個相容 release，重啟本應用，不刪資料。部署後驗證 HTTPS、登入、媒體 GET／HEAD／Range、排程及啟用狀態，更新本應用備份登記與私人 home 索引。
 
-v2 は `jobs.progress` を追加し旧列を維持します。ロールバックは前の互換 release に戻してアプリを再起動し、データは削除しません。確認後にバックアップ登録と非公開運用索引を更新してください。
+v2 は `jobs.progress`、v2.0.1 は `jobs.errors` を追加し旧列を維持します。ロールバックは前の互換 release に戻してアプリを再起動し、データは削除しません。確認後にバックアップ登録と非公開運用索引を更新してください。
+
+影片下載依 movieType 分流 YouTube／Vimeo；僅將已知 YouTube 圖片主機的 HTTP 封面升級 HTTPS。工作 errors 保存投稿 ID、階段及白名單錯誤碼；原始工具 stderr、網址、憑證不入紀錄。既有歷史失敗不猜測回填。／動画は movieType により YouTube と Vimeo に分岐します。既知の YouTube 画像ホストだけ HTTP を HTTPS に昇格します。エラー記録には ID・段階・許可済みコードだけを保存し、過去の原因は推測して補いません。

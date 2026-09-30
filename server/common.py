@@ -58,6 +58,7 @@ def initialize():
         CREATE UNIQUE INDEX IF NOT EXISTS one_active_job ON jobs ((true)) WHERE status IN ('queued','running','paused');
         ALTER TABLE jobs ADD COLUMN IF NOT EXISTS trigger text NOT NULL DEFAULT 'manual';
         ALTER TABLE jobs ADD COLUMN IF NOT EXISTS progress jsonb;
+        ALTER TABLE jobs ADD COLUMN IF NOT EXISTS errors jsonb NOT NULL DEFAULT '[]';
         CREATE TABLE IF NOT EXISTS posts (
           resource_key text PRIMARY KEY, source_id text NOT NULL, kind text NOT NULL,
           title text NOT NULL, member text NOT NULL, body text NOT NULL,

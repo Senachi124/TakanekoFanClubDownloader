@@ -9,12 +9,16 @@ if (require.main === module) {
   console.log = console.warn = console.error = () => {};
 }
 const {run} = require('../src/main/api/archiveEngine');
+const {diagnostics} = require('../src/main/utils/downloadErrors');
+function failureResult(error,input) {
+  const details=diagnostics(error,input.item || {id:'list'},input.action==='list'?'list':'download');
+  return {id:input.requestId,error:'Download failed',diagnostics:details};
+}
 if (require.main === module) readline.createInterface({ input: process.stdin }).on('line', line => {
   let input;
   try { input = JSON.parse(line); } catch { return; }
   run(input, {}, progress => write({id:input.requestId,progress})).then(result => write({ id: input.requestId, result })).catch(error => {
-    const http = String(error.message).match(/HTTP (\d{3})/);
-    write({ id: input.requestId, error: http ? `Fanclub HTTP ${http[1]}` : 'Download failed; retry or check Fanclub token.' });
+    write(failureResult(error,input));
   });
 });
-module.exports = { run };
+module.exports = { run, failureResult };

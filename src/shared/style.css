@@ -10,3 +10,5 @@
 .stage{margin:18px 0 24px}.stage small{color:var(--muted)}[data-language][aria-selected=true]{color:var(--accent);border-bottom:2px solid var(--accent)}
 
 header{height:auto;min-height:112px;gap:16px;flex-wrap:wrap;padding-top:18px;padding-bottom:18px}.header-right{flex-wrap:wrap;justify-content:flex-end}@media(max-width:600px){header{min-height:90px}.header-right{justify-content:flex-start;gap:10px}}
+
+.download-errors{margin:16px 0;padding:14px;border:1px solid #e8ad7855;border-radius:8px;overflow-wrap:anywhere}.download-errors summary{cursor:pointer;color:#ffc88f}.download-errors li{margin:8px 0;font-size:13px}.download-errors code{font-size:12px}

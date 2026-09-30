@@ -11,11 +11,11 @@ def history(params):
     rows = query('''SELECT * FROM (
         SELECT id,'fetch' AS kind,status,trigger,total,completed,failed,message,created_at,updated_at,
                NULL::timestamptz AS started_at,NULL::timestamptz AS finished_at,
-               NULL::double precision AS elapsed_seconds,false AS duration_known
+               NULL::double precision AS elapsed_seconds,false AS duration_known,errors
         FROM jobs
         UNION ALL
         SELECT id,'nas' AS kind,status,trigger,total,completed,failed,message,created_at,updated_at,
-               started_at,finished_at,elapsed_seconds,duration_known FROM backup_jobs
+               started_at,finished_at,elapsed_seconds,duration_known,'[]'::jsonb AS errors FROM backup_jobs
         ) activity WHERE (%s='all' OR kind=%s)
         ORDER BY created_at DESC,kind,id LIMIT 51 OFFSET %s''',(kind,kind,offset))
     return {'items':rows[:50],'hasMore':len(rows)>50}

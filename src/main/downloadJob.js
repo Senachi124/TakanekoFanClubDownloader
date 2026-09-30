@@ -1,9 +1,11 @@
 const {run} = require('./api/archiveEngine');
 const {normalizeConcurrency} = require('./utils/concurrency');
 const {ArchiveReader} = require('../../server/local-reader');
+const {diagnostics} = require('./utils/downloadErrors');
 function initialProgress() { return {list:{done:0,total:null,failed:0,skipped:0,state:'running'},details:{done:0,total:null,failed:0,skipped:0,state:'waiting'},files:{done:0,total:null,failed:0,skipped:0,state:'waiting'}}; }
 async function downloadJob({token,directory,cacheDirectory,settings,state,emit,engine=run}) {
   const progress = initialProgress();
+  progress.errors=[];
   const publish = () => emit(JSON.parse(JSON.stringify(progress)));
   publish();
   try {
@@ -28,7 +30,8 @@ async function downloadJob({token,directory,cacheDirectory,settings,state,emit,e
           });
           if(!detailed) progress.details.done++;
           progress.files.done++;
-        } catch {
+        } catch (error) {
+          progress.errors.push(...diagnostics(error,item));
           if(!detailed) {progress.details.done++;progress.details.failed++;}
           progress.files.done++;progress.files.failed++;
         }
@@ -40,6 +43,7 @@ async function downloadJob({token,directory,cacheDirectory,settings,state,emit,e
     return {success:!state.isCancelled && !progress.files.failed,status:state.isCancelled?'cancelled':progress.files.failed?'failed':'completed',progress};
   } catch(error) {
     for(const stage of Object.values(progress)) if(stage.state==='running') stage.state='failed';
+    progress.errors.push(...diagnostics(error,{id:'list'},'list'));
     publish(); throw error;
   }
 }

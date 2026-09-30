@@ -59,6 +59,7 @@ async function refresh() {
   $('jobMessage').textContent = job?.message || (data.hasToken ? '準備好了，隨時可以開始下載。' : '匯入 Fanclub cookies／登入資料，即可開始下載。');
   $('progress').value = job?.total ? job.completed / job.total * 100 : 0;
   $('fetchPercent').textContent = `${Math.floor($('progress').value)}%`;
+  window.TakanekoUI.errors($('downloadErrors'),job?.errors || []);
   $('jobCount').textContent = job ? `${job.completed} / ${job.total} 篇${job.failed ? ` · ${job.failed} 篇需重試` : ''}` : '尚未開始';
   $('postCount').textContent = data.stats.posts;
   $('lastFetch').textContent = data.lastFetch ? `${displayDate(data.lastFetch.updated_at)} · ${statusLabel(data.lastFetch)}` : '尚無紀錄';
@@ -115,7 +116,7 @@ async function loadActivity() {
     const title = document.createElement('strong'); title.textContent = `${item.kind === 'nas' ? 'NAS 備份' : '抓取投稿'} · ${statusLabel(item)}`;
     const meta = document.createElement('small'); meta.textContent = `${displayDate(item.created_at)} · ${item.trigger === 'manual' ? '手動' : '自動'} · ${item.completed} / ${item.total} 篇${item.failed ? ` · ${item.failed} 篇失敗` : ''}${item.kind === 'nas' ? ` · 耗時 ${duration(item)}` : ''}`;
     const message = document.createElement('p'); message.textContent = item.message || '—';
-    row.append(title, meta, message); return row;
+    const errors=document.createElement('div');errors.className='download-errors';window.TakanekoUI.errors(errors,item.errors || []);row.append(title, meta, message, errors);return row;
   });
   if (!rows.length) { const empty = document.createElement('p'); empty.className = 'help'; empty.textContent = '尚無執行紀錄'; rows.push(empty); }
   $('activityList').replaceChildren(...rows);

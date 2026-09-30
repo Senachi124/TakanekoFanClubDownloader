@@ -17,6 +17,7 @@ function setup({store,state,getWindow}) {
     await ready[mode]; return readers[mode];
   }
   ipcMain.handle('get-login-status',()=>!!store.get('token'));
+  ipcMain.handle('get-download-errors',()=>store.get('downloadErrors',[]));
   ipcMain.handle('save-v2-settings',(_e,value)=>{
     const settings={concurrency:normalizeConcurrency(value.concurrency),blogs:!!value.blogs,gallery:!!value.gallery,movies:!!value.movies};
     store.set('downloadConcurrency',settings.concurrency);store.set('v2Settings',settings);return settings;
@@ -39,9 +40,12 @@ function setup({store,state,getWindow}) {
   ipcMain.handle('start-download',async()=>{
     if(running) return {success:false,status:'busy'};
     const token=store.get('token');if(!token) return {success:false,status:'loginRequired'};
-    running=true;state.isPaused=false;state.isCancelled=false;
+    running=true;state.isPaused=false;state.isCancelled=false;let errorsSaved=-1;
     try {
-      const result=await downloadJob({token,directory:exported,cacheDirectory:cache,settings:{blogs:true,gallery:true,movies:true,...store.get('v2Settings',{}),concurrency:store.get('downloadConcurrency',5)},state,emit:p=>{if(!getWindow().isDestroyed())getWindow().webContents.send('job-progress',p);}});
+      const result=await downloadJob({token,directory:exported,cacheDirectory:cache,settings:{blogs:true,gallery:true,movies:true,...store.get('v2Settings',{}),concurrency:store.get('downloadConcurrency',5)},state,emit:p=>{
+        if(errorsSaved!==(p.errors || []).length){store.set('downloadErrors',p.errors || []);errorsSaved=(p.errors || []).length;}
+        if(!getWindow().isDestroyed())getWindow().webContents.send('job-progress',p);
+      }});
       ready.local=readers.local.select(exported);return result;
     } catch {return {success:false,status:'failed'};} finally {running=false;}
   });

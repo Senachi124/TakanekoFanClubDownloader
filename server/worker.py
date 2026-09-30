@@ -17,6 +17,7 @@ from fanclub_auth import get_token
 from post_dates import publication_date
 from archive_layout import readable_folder, safe_path, refresh_record
 from progress import Progress
+from download_errors import DownloadError, details as error_details
 
 sys.path.insert(0, '/opt/vm1-backup')
 import vm1_backup as backup
@@ -49,7 +50,7 @@ class Bridge:
                         future.set_exception(RuntimeError('Progress update failed'))
                     continue
                 if future:
-                    if value.get('error'): future.set_exception(RuntimeError(value['error']))
+                    if value.get('error'): future.set_exception(DownloadError(value.get('diagnostics')))
                     else: future.set_result(value['result'])
             except (ValueError, KeyError):
                 continue  # Legacy video progress output is not protocol data.
@@ -200,15 +201,21 @@ def run_job(bridge, job):
                 item = next(pending, None)
                 if item is None: exhausted = True; break
                 future = pool.submit(process_item, bridge, token, item, job_id, progress)
-                identities[future] = f"takaneko:{item['kind']}:{item['id']}:v1"
+                identities[future] = item
                 active.add(future)
             if not active:
                 if not exhausted: time.sleep(2)
                 continue
             done, active = concurrent.futures.wait(active, timeout=2, return_when=concurrent.futures.FIRST_COMPLETED)
             for future in done:
-                failed = future.exception() is not None
-                progress.settled(identities.pop(future), failed)
+                error = future.exception()
+                failed = error is not None
+                item = identities.pop(future)
+                progress.settled(f"takaneko:{item['kind']}:{item['id']}:v1", failed)
+                if failed:
+                    safe = error_details(error,item)
+                    query('UPDATE jobs SET errors=errors || %s::jsonb WHERE id=%s',(json.dumps(safe),job_id))
+                    print(json.dumps({'event':'download_failed','diagnostics':safe}),flush=True)
                 query('UPDATE jobs SET completed=completed+1,failed=failed+%s,updated_at=now() WHERE id=%s', (int(failed), job_id))
     row = query('SELECT failed FROM jobs WHERE id=%s', (job_id,), one=True)
     status = 'cancelled' if cancelled else ('failed' if row['failed'] else 'completed')
@@ -257,7 +264,8 @@ def main():
             if bridge.process.poll() is not None: bridge = Bridge()
             run_job(bridge, job)
         except Exception as error:
-            message = str(error) if str(error).startswith('Fanclub HTTP ') else '下載失敗；請檢查 Fanclub token 及服務狀態'
+            message = '下載失敗；請查看失敗詳情後重試'
+            query('UPDATE jobs SET errors=errors || %s::jsonb WHERE id=%s',(json.dumps(error_details(error)),job['id']))
             row = query('SELECT progress FROM jobs WHERE id=%s',(job['id'],),one=True)
             tracker = Progress(job['id'],query)
             if row and row.get('progress'): tracker.value = row['progress']

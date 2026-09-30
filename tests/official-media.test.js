@@ -68,3 +68,44 @@ test('movie uses bundled executable without shell, shared slot and only complete
   assert.equal(calls.length,1);
  } finally {global.fetch=previous;await fs.rm(root,{recursive:true,force:true});}
 });
+
+test('movies route YouTube/Vimeo, upgrade only known image hosts and preserve safe stage diagnostics',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'takaneko-movie-routing-'));
+ const previous=global.fetch,requests=[],calls=[];
+ let detail={movieType:'youtube',videoId:'AbC_dE-1234',thumbnail:'http://img.youtube.com/vi/AbC_dE-1234/maxresdefault.jpg',title:'fixture',createdAt:1700000000000};
+ let coverStatus=200,toolExit=0;
+ global.fetch=async url=>{
+  requests.push(String(url));
+  if(String(url).includes('getMovieDetail'))return Response.json(detail);
+  assert.ok(String(url).startsWith('https:'));return new Response('image',{status:coverStatus});
+ };
+ const filename=path.resolve(__dirname,'../src/main/api/exportMovies.js'),localRequire=createRequire(filename),module={exports:{}};
+ const spawn=(command,args,options)=>{
+  calls.push({command,args,options});const child=new EventEmitter();child.stdout=new EventEmitter();child.stderr=new EventEmitter();
+  setTimeout(async()=>{child.stderr.emit('data','private video https://signed.example/?token=SECRET');if(!toolExit)await fs.writeFile(args[args.indexOf('-o')+1],'video');child.emit('close',toolExit);},0);return child;
+ };
+ vm.runInNewContext(await fs.readFile(filename,'utf8'),{module,console,process,setTimeout,URL,require:name=>name==='child_process'?{spawn}:name==='../utils/mediaTools'?{getYtDlpConfig:()=>({command:'fixture-yt-dlp'})}:localRequire(name)});
+ const {handleBackupMovies,movieSource,movieThumbnail}=module.exports;
+ try {
+  const output=await handleBackupMovies('fixture',root,{},null,{id:'youtube-1'});
+  assert.equal(calls[0].args.at(-1),'https://www.youtube.com/watch?v=AbC_dE-1234');assert.equal(calls[0].options.shell,false);
+  assert.ok(requests.includes('https://img.youtube.com/vi/AbC_dE-1234/maxresdefault.jpg'));
+  assert.match(await fs.readFile(path.join(output,'index.md'),'utf8'),/\*\*YouTube ID\*\*/);
+  assert.equal(movieSource({movieType:'vimeo',videoId:'12345/abcdef'}).url,'https://player.vimeo.com/video/12345?h=abcdef');
+  assert.equal(movieSource({videoId:'12345'}).url,'https://player.vimeo.com/video/12345');
+  assert.equal(movieThumbnail('http://i.ytimg.com/vi/fixture/default.jpg'),'https://i.ytimg.com/vi/fixture/default.jpg');
+  for(const url of ['http://other.example/image.jpg','http://img.youtube.com.evil.test/image.jpg','http://user:secret@img.youtube.com/image.jpg','http://img.youtube.com:81/image.jpg'])assert.throws(()=>movieThumbnail(url),{code:'HTTPS_REQUIRED'});
+  assert.throws(()=>movieSource({movieType:'unknown',videoId:'12345'}),{code:'MOVIE_TYPE_UNSUPPORTED'});
+  assert.throws(()=>movieSource({movieType:'youtube',videoId:'invalid;command'}),{code:'VIDEO_ID_INVALID'});
+  coverStatus=503;toolExit=1;
+  await assert.rejects(handleBackupMovies('fixture',root,{},null,{id:'youtube-failed'}),error=>{
+   assert.equal(error.diagnostics.length,2);
+   assert.equal(error.diagnostics[0].stage,'cover');assert.equal(error.diagnostics[0].code,'HTTP_503');
+   assert.equal(error.diagnostics[1].stage,'video');assert.equal(error.diagnostics[1].code,'MEDIA_ACCESS_DENIED');
+   const result=require('../server/bridge').failureResult(error,{requestId:'r',item:{id:'youtube-failed',kind:'movie'}});
+   assert.ok(!JSON.stringify(result).includes('SECRET'));assert.ok(!JSON.stringify(result).includes('signed.example'));return true;
+  });
+  const folders=await fs.readdir(path.join(root,'MOVIE'));const failedFolder=folders.find(f=>path.join(root,'MOVIE',f)!==output);
+  await assert.rejects(fs.access(path.join(root,'MOVIE',failedFolder,'.post-id')),{code:'ENOENT'});
+ }finally{global.fetch=previous;await fs.rm(root,{recursive:true,force:true});}
+});

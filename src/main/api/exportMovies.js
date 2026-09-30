@@ -7,6 +7,29 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { getYtDlpConfig } = require('../utils/mediaTools');
 const { withVideoSlot } = require('../utils/videoQueue');
+const {failure, diagnostic} = require('../utils/downloadErrors');
+
+function movieSource(detail) {
+  const type=String(detail.movieType || 'vimeo').toLowerCase();
+  const id=String(detail.videoId || '');
+  if(!id) throw failure('VIDEO_ID_MISSING','Missing video ID');
+  if(type==='youtube') {
+    if(!/^[a-zA-Z0-9_-]{11}$/.test(id)) throw failure('VIDEO_ID_INVALID','Invalid YouTube ID');
+    return {type,id,url:`https://www.youtube.com/watch?v=${id}`,label:'YouTube'};
+  }
+  if(type!=='vimeo') throw failure('MOVIE_TYPE_UNSUPPORTED','Unsupported movie type');
+  const match=/^(\d+)(?:\/([a-f0-9]+)|\?h=([a-f0-9]+))?$/i.exec(id);
+  if(!match) throw failure('VIDEO_ID_INVALID','Invalid Vimeo ID');
+  const hash=match[2] || match[3];
+  return {type,id,url:`https://player.vimeo.com/video/${match[1]}${hash?'?h='+hash:''}`,label:'Vimeo'};
+}
+
+function movieThumbnail(value) {
+  const url=new URL(value,'https://takanekofc.com/');
+  if(url.protocol==='http:' && ['img.youtube.com','i.ytimg.com'].includes(url.hostname) && !url.port && !url.username && !url.password) url.protocol='https:';
+  if(url.protocol!=='https:' || url.username || url.password) throw failure('HTTPS_REQUIRED','HTTPS required');
+  return url.href;
+}
 
 function fetchJson(url, token) {
   return new Promise((resolve, reject) => {
@@ -47,17 +70,19 @@ function runCommand(cmd, args) {
   return new Promise((resolve, reject) => {
     const proc = spawn(cmd, args, { shell: false, windowsHide: true });
 
-    proc.stdout.on('data', d => process.stdout.write(d.toString()));
-    proc.stderr.on('data', d => process.stderr.write(d.toString()));
+    // Tool output may contain signed URLs. Retain a bounded tail only to classify failures.
+    let stderr='';
+    proc.stdout.on('data', () => {});
+    proc.stderr.on('data', d => {stderr=(stderr+d.toString()).slice(-8192);});
 
     proc.on('close', code => {
       if (code === 0) resolve();
-      else reject(new Error(`${cmd} exited with code ${code}`));
+      else reject(failure(/sign in|private video|not available|unavailable|HTTP Error 403|login required|confirm.*bot/i.test(stderr)?'MEDIA_ACCESS_DENIED':'MEDIA_TOOL_FAILED'));
     });
 
     proc.on('error', (err) => {
       if (err.code === 'ENOENT') {
-        reject(new Error(`Command '${cmd}' not found. Please ensure it is installed and added to PATH.`));
+        reject(failure('MEDIA_TOOL_NOT_FOUND'));
       } else {
         reject(err);
       }
@@ -68,11 +93,7 @@ function runCommand(cmd, args) {
 /**
  * 直接下載原生最高畫質，並以 remux (無損直通) 封裝為 MP4
  */
-async function downloadWithYtDlp(vimeoId, destPath) {
-  if (!/^[0-9]+(?:[/?]h?=?[a-f0-9]+)?$/i.test(String(vimeoId))) throw new Error('Invalid Vimeo ID');
-  const videoUrl = `https://player.vimeo.com/video/${vimeoId}`;
-
-  console.log(`\n[Movie yt-dlp] Downloading source quality (remux to mp4): ${videoUrl}`);
+async function downloadWithYtDlp(source, destPath) {
   const ytdlpArgs = [
     '--referer', 'https://takanekofc.com/',
     '--concurrent-fragments', '5',
@@ -80,12 +101,11 @@ async function downloadWithYtDlp(vimeoId, destPath) {
     '-f', 'bestvideo+bestaudio/best',
     '--remux-video', 'mp4',
     '-o', destPath,
-    videoUrl
+    source.url
   ];
   const tools = getYtDlpConfig();
   if(tools.ffmpegLocation) ytdlpArgs.unshift('--ffmpeg-location',tools.ffmpegLocation);
   await withVideoSlot(()=>runCommand(tools.command, ytdlpArgs));
-  console.log(`[Movie] Saved original quality video: ${destPath}\n`);
 }
 
 async function handleBackupMovies(token, rootExportPath, state, onProgress, selectedItem = null) {
@@ -122,6 +142,7 @@ async function handleBackupMovies(token, rootExportPath, state, onProgress, sele
       await new Promise(r => setTimeout(r, 500));
     }
 
+    let stage='details';const issues=[];
     try {
       const detailUrl = `https://api.takanekofc.com/movie/queries/getMovieDetail/${encodeURIComponent(item.id)}`;
       const detail = await fetchJson(detailUrl, token);
@@ -135,45 +156,43 @@ async function handleBackupMovies(token, rootExportPath, state, onProgress, sele
       await fs.mkdir(movieFolder, { recursive: true });
       const marker = path.join(movieFolder, '.post-id');
       try { if ((await fs.readFile(marker,'utf8')).trim() === String(item.id)) { count++; if(onProgress) onProgress(count,total); continue; } } catch(e) { if(e.code !== 'ENOENT') throw e; }
-      let incomplete = false;
 
       // 封面圖
       let thumbMd = '';
       if (detail.thumbnail) {
-        const thumbUrl = detail.thumbnail.startsWith('http')
-          ? detail.thumbnail
-          : `https://takanekofc.com/${detail.thumbnail.replace(/^\//, '')}`;
+        try {
+        const thumbUrl = movieThumbnail(detail.thumbnail);
         const thumbExt = path.extname(thumbUrl.split('?')[0]) || '.png';
         const localThumb = path.join(movieFolder, `cover${thumbExt}`);
         if (!fsSync.existsSync(localThumb)) {
           try {
             await downloadToFile(thumbUrl, localThumb, IMAGE_HEADERS);
           } catch (e) {
-            incomplete = true;
-            console.warn(`[Movie Backup] Failed to download thumbnail:`, e.message);
+            issues.push(diagnostic(e,{id:item.id,kind:'movie'},'cover'));
           }
         }
         thumbMd = `![Thumbnail](cover${thumbExt})\n\n`;
+        } catch(error) {issues.push(diagnostic(error,{id:item.id,kind:'movie'},'cover'));}
       }
 
       // 影片下載 (最高原生畫質)
-      const vimeoId = detail.videoId;
-      if (!vimeoId) throw new Error('Missing video ID');
+      stage='video';
+      const source=movieSource(detail);
       const videoFilename = 'video.mp4';
       const localVideoPath = path.join(movieFolder, videoFilename);
 
-      if (vimeoId && !fsSync.existsSync(localVideoPath)) {
-        console.log(`[Movie Backup] Starting download for: ${folderTitle} (${vimeoId})`);
-        await downloadWithYtDlp(vimeoId, localVideoPath);
+      if (!fsSync.existsSync(localVideoPath)) {
+        await downloadWithYtDlp(source, localVideoPath);
       }
 
-      if (!(await fs.stat(localVideoPath)).size) throw new Error('Empty movie download');
+      if (!(await fs.stat(localVideoPath)).size) throw failure('EMPTY_MEDIA');
 
       // 建立 Markdown
+      stage='save';
       const desc = detail.description || item.description || '';
       const mdContent = `# ${title}\n\n` +
         `**Date**: ${formatTimestamp(detail.displayDate || detail.createdAt)}\n` +
-        `**Vimeo ID**: ${vimeoId || 'N/A'}\n\n` +
+        `**${source.label} ID**: ${source.id}\n\n` +
         `---\n\n` +
         `${desc}\n\n` +
         `<video controls src="${videoFilename}" style="max-width: 100%; border-radius: 8px;"></video>\n\n` +
@@ -181,14 +200,15 @@ async function handleBackupMovies(token, rootExportPath, state, onProgress, sele
         `${thumbMd}`;
 
       await fs.writeFile(path.join(movieFolder, 'index.md'), mdContent, 'utf-8');
-      if (incomplete) throw new Error('One or more movie media downloads failed');
+      if (issues.length) {const error=failure('DOWNLOAD_FAILED');error.diagnostics=issues;throw error;}
       await fs.writeFile(marker,String(item.id),'utf8');
       if (selectedItem) return movieFolder;
 
     } catch (err) {
+      if(!err.diagnostics) err.diagnostics=[...issues,diagnostic(err,{id:item.id,kind:'movie'},stage)];
       if (selectedItem || state?.isCancelled) throw err;
       failed++;
-      console.error(`[Movie Backup] Error processing movie ${item.id}:`, err.message);
+      console.error('[Movie Backup]',JSON.stringify(err.diagnostics));
     }
 
     count++;
@@ -201,4 +221,4 @@ async function handleBackupMovies(token, rootExportPath, state, onProgress, sele
   console.log('[Movie Backup] All movies backup completed.');
 }
 
-module.exports = { handleBackupMovies };
+module.exports = { handleBackupMovies, movieSource, movieThumbnail };
