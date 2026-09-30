@@ -1,3 +1,4 @@
+TakanekoUI.init();
 const $ = id => document.getElementById(id);
 let csrf = '', offset = 0, job = null, lastCount = -1, member = null, requestSerial = 0, mediaItems = [], mediaIndex = 0;
 const multimedia = location.pathname === '/library';
@@ -7,7 +8,7 @@ let activityOffset = 0, activitySerial = 0;
 $('downloadsPage').hidden = browsing || backingUp;
 $('backupPage').hidden = !backingUp;
 $('browsePage').hidden = !browsing;
-$('settingsToggle').hidden = !backingUp;
+$('settingsToggle').hidden = false;
 $('pageTitle').textContent = multimedia ? '你的多媒體庫。' : browsing ? '你的內容庫。' : backingUp ? 'NAS 與排程。' : '抓取投稿。';
 $('pageEyebrow').textContent = multimedia ? 'TAKANEKO / MEDIA' : browsing ? 'TAKANEKO / COLLECTION' : backingUp ? 'TAKANEKO / BACKUP' : 'TAKANEKO / DOWNLOAD';
 $(multimedia ? 'libraryLink' : browsing ? 'browseLink' : backingUp ? 'backupLink' : 'downloadsLink').setAttribute('aria-current', 'page');
@@ -47,6 +48,7 @@ async function refresh() {
     $('gallery').checked = data.settings.gallery; $('movies').checked = data.settings.movies;
   }
   job = data.job;
+  TakanekoUI.progress($('stages'), job?.progress);
   const active = job && ['queued', 'running', 'paused'].includes(job.status);
   $('start').disabled = !!active || !data.hasToken;
   $('pause').disabled = !active; $('cancel').disabled = !active;
@@ -155,7 +157,7 @@ async function loadPosts() {
     } else { const mark = document.createElement('div'); mark.className = 'placeholder'; mark.textContent = video ? '▶' : multimedia ? '▧' : 'T'; card.append(mark); }
     const info = document.createElement('div'); info.className = 'post-info';
     const memberName = document.createElement('small'); memberName.textContent = multimedia ? `${post.member} · ${video ? '影片' : '圖片'}` : post.member;
-    const title = document.createElement('h3'); title.textContent = post.title;
+    const title = document.createElement('h3'); title.setAttribute('data-content',''); title.textContent = post.title;
     const date = document.createElement('time'); date.dateTime = post.created_at; date.textContent = displayDate(post.created_at);
     info.append(memberName, title, date); card.append(info);
     card.addEventListener('click', action(async () => {

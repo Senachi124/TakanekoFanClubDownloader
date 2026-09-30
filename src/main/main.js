@@ -1,8 +1,9 @@
-const { app, BrowserWindow, ipcMain, shell, dialog, session } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, session, protocol } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
 const packageInfo = require('../../package.json');
 
+protocol.registerSchemesAsPrivileged([{scheme:'archive',privileges:{standard:true,secure:true,supportFetchAPI:true,stream:true}}]);
 const store = new Store();
 const APP_NAME = packageInfo.productName
   || packageInfo.build?.productName
@@ -21,21 +22,26 @@ let loginWindow;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 900,
-    height: 700,
+    width: 1240,
+    height: 860,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      preload: path.join(__dirname, 'preload.js')
     },
     titleBarStyle: 'hiddenInset',
     backgroundColor: '#1a1a2e'
   });
 
-  mainWindow.setTitle(`${APP_NAME} v${app.getVersion()}`);
+  mainWindow.setTitle(`${APP_NAME} v${packageInfo.version}`);
+  mainWindow.webContents.setWindowOpenHandler(() => ({action:'deny'}));
+  mainWindow.webContents.on('will-navigate', event => event.preventDefault());
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 }
 
 app.whenReady().then(() => {
+  require('./desktopV2').setup({store,state:exportState,getWindow:()=>mainWindow});
   createWindow();
 
   app.on('activate', () => {
@@ -64,7 +70,7 @@ ipcMain.handle('get-token', () => {
 // Expose the packaged app name and runtime version to the renderer UI.
 ipcMain.handle('get-app-info', () => ({
   name: APP_NAME,
-  version: app.getVersion()
+  version: packageInfo.version
 }));
 
 // Save token
@@ -136,7 +142,7 @@ ipcMain.handle('capture-token', async () => {
       console.log('✅ Token captured successfully!');
 
       loginWindow.close();
-      resolve({ success: true, token: bearerToken });
+      resolve({ success: true });
     };
 
     // 2. Define failure/timeout handler
@@ -205,252 +211,7 @@ ipcMain.handle('get-exported-path', () => {
   return path.join(app.getPath('userData'), 'exported');
 });
 
-// Start export process
-ipcMain.handle('start-export', async (event) => {
-  const token = store.get('token');
-  if (!token) {
-    return { success: false, error: 'No token found. Please login first.' };
-  }
 
-  try {
-    const exportedPath = path.join(app.getPath('userData'), 'exported');
-    const downloadConcurrency = normalizeDownloadConcurrency(
-      store.get('downloadConcurrency', DEFAULT_DOWNLOAD_CONCURRENCY)
-    );
-
-    // Step 1: Get all posts
-    mainWindow.webContents.send('export-progress', { step: 'getAllPosts', progress: 0, message: 'Fetching post list...' });
-    const notifications = await handleGetAllPosts(token);
-    mainWindow.webContents.send('export-progress', { step: 'getAllPosts', progress: 100, message: `Found ${notifications.length} posts` });
-
-    // Step 2: Get post details
-    mainWindow.webContents.send('export-progress', { step: 'getPostDetails', progress: 0, message: 'Fetching post details...' });
-    const postDetails = await handleGetPostDetails(token, notifications, exportedPath, exportState, (progress) => {
-      mainWindow.webContents.send('export-progress', { step: 'getPostDetails', progress, message: `Fetching details: ${progress}%` });
-    }, downloadConcurrency);
-    mainWindow.webContents.send('export-progress', { step: 'getPostDetails', progress: 100, message: `Fetched ${postDetails.length} posts` });
-
-    // Step 3: Export posts
-    mainWindow.webContents.send('export-progress', { step: 'exportPosts', progress: 0, message: 'Exporting posts...' });
-    await handleExportPosts(postDetails, exportedPath, exportState, (progress) => {
-      mainWindow.webContents.send('export-progress', { step: 'exportPosts', progress, message: `Exporting: ${progress}%` });
-    }, downloadConcurrency);
-    mainWindow.webContents.send('export-progress', { step: 'exportPosts', progress: 100, message: 'Export complete!' });
-
-    return { success: true, path: exportedPath };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-});
-
-// Get gallery data (Updated for Image Wall + Post List)
-ipcMain.handle('get-gallery-data', async () => {
-  const fs = require('fs').promises;
-  const path = require('path');
-  const exportedPath = path.join(app.getPath('userData'), 'exported');
-
-  try {
-    try {
-      await fs.access(exportedPath);
-    } catch {
-      return { success: false, error: 'Export directory not found.', data: {} };
-    }
-
-    const members = await fs.readdir(exportedPath);
-    const galleryData = {};
-
-    for (const member of members) {
-      const memberPath = path.join(exportedPath, member);
-      const stat = await fs.stat(memberPath);
-
-      if (stat.isDirectory()) {
-        const memberData = {
-          allImages: [], 
-          posts: []      
-        };
-
-        
-        const picturesPath = path.join(memberPath, 'pictures');
-        try {
-          const pics = await fs.readdir(picturesPath);
-          memberData.allImages = pics
-            .filter(f => /\.(jpg|jpeg|png|gif|webp)$/i.test(f))
-            .map(f => path.join(picturesPath, f));
-        } catch (e) {
-          // No pictures folder, skip
-        }
-
-        
-        const entries = await fs.readdir(memberPath);
-        for (const entry of entries) {
-          if (entry === 'pictures' || entry === '.DS_Store') continue;
-
-          const postPath = path.join(memberPath, entry);
-          const postStat = await fs.stat(postPath);
-
-          if (postStat.isDirectory()) {
-            const files = await fs.readdir(postPath);
-            const mdFile = files.find(f => f === 'index.md');
-            // Find the first image as cover
-            const coverImage = files.find(f => /\.(jpg|jpeg|png)$/i.test(f));
-
-            let title = entry;
-            let content = '';
-
-            if (mdFile) {
-              const mdContent = await fs.readFile(path.join(postPath, mdFile), 'utf-8');
-              content = mdContent;
-              // Try to extract title from md
-              const titleMatch = mdContent.match(/^# (.+)$/m);
-              if (titleMatch) title = titleMatch[1];
-            }
-
-            memberData.posts.push({
-              folder: entry,
-              fullPath: postPath,
-              title: title,
-              cover: coverImage ? path.join(postPath, coverImage) : null,
-              content: content, // Contains Markdown content
-              date: entry.split('_')[0]
-            });
-          }
-        }
-
-        // Sort posts by date in descending order
-        memberData.posts.sort((a, b) => b.folder.localeCompare(a.folder));
-        
-        galleryData[member] = memberData;
-      }
-    }
-
-    return { success: true, data: galleryData };
-  } catch (error) {
-    console.error('Gallery Error:', error);
-    return { success: false, error: error.message, data: {} };
-  }
-});
-
-// --- NEW IPC HANDLERS FOR STEP-BY-STEP CONTROL ---
-
-// Control Handlers
-ipcMain.handle('control-pause', () => {
-  exportState.isPaused = true;
-  console.log('⚠️ Process PAUSED by user');
-  return true;
-});
-
-ipcMain.handle('control-resume', () => {
-  exportState.isPaused = false;
-  console.log('▶️ Process RESUMED by user');
-  return true;
-});
-
-ipcMain.handle('control-cancel', () => {
-  exportState.isCancelled = true;
-  // Resume if paused so loops can break
-  exportState.isPaused = false; 
-  console.log('ww Process CANCELED by user');
-  return true;
-});
-
-// Reset state before starting
-ipcMain.handle('reset-state', () => {
-  exportState.isPaused = false;
-  exportState.isCancelled = false;
-  return true;
-});
-
-// Step 1: Get Post List
-ipcMain.handle('step-1-fetch-list', async (event) => {
-  const token = store.get('token');
-  if (!token) throw new Error('No token found');
-
-  console.log('--- STEP 1 STARTED: Fetching List ---');
-  // Pass state (though Step 1 is fast, we keep consistency)
-  const notifications = await handleGetAllPosts(token);
-  console.log(`--- STEP 1 COMPLETE: Found ${notifications.length} items ---`);
-  return notifications;
-});
-
-// Step 2: Get Post Details (With Pause Support)
-ipcMain.handle('step-2-fetch-details', async (event, notifications, requestedConcurrency) => {
-  const token = store.get('token');
-  const downloadConcurrency = normalizeDownloadConcurrency(requestedConcurrency);
-  const exportedPath = path.join(app.getPath('userData'), 'exported');
-  console.log(`--- STEP 2 STARTED: Fetching Details for ${notifications.length} items ---`);
-  
-  // Pass the state object to allow pausing inside the loop
-  const details = await handleGetPostDetails(token, notifications, exportedPath, exportState, (progress, current, total, meta = {}) => {
-    // Send progress to UI
-    event.sender.send('export-progress', { 
-      step: 'getPostDetails', 
-      progress, 
-      message: `Fetching: ${current}/${total} (skipped: ${meta.skipped || 0})`
-    });
-  }, downloadConcurrency);
-
-  console.log('--- STEP 2 COMPLETE ---');
-  return details;
-});
-
-// Step 3: Export Files (With Pause Support)
-ipcMain.handle('step-3-export-files', async (event, postDetails, requestedConcurrency) => {
-  const exportedPath = path.join(app.getPath('userData'), 'exported');
-  const downloadConcurrency = normalizeDownloadConcurrency(requestedConcurrency);
-  console.log(`--- STEP 3 STARTED: Exporting to ${exportedPath} ---`);
-
-  await handleExportPosts(postDetails, exportedPath, exportState, (progress, current, total) => {
-    event.sender.send('export-progress', { 
-      step: 'exportPosts', 
-      progress, 
-      message: `Saving: ${current}/${total}` 
-    });
-  }, downloadConcurrency);
-
-  console.log('--- STEP 3 COMPLETE ---');
-  return exportedPath;
-});
-
-// Manager Blogs, Gallery & Movie IPC Handlers
-const { handleBackupTopicsBlogs } = require('./api/exportBlogs');
-const { handleBackupGallery } = require('./api/exportGallery');
-const { handleBackupMovies } = require('./api/exportMovies');
-
-ipcMain.handle('step-blogs-export', async (event) => {
-  const token = store.get('token');
-  if (!token) return;
-  const exportedPath = path.join(app.getPath('userData'), 'exported');
-  await handleBackupTopicsBlogs(token, exportedPath, exportState, (current, total) => {
-    event.sender.send('export-progress', {
-      step: 'exportPosts',
-      progress: Math.round((current / total) * 100),
-      message: `Saving Manager Blogs: ${current}/${total}`
-    });
-  });
-});
-
-ipcMain.handle('step-gallery-export', async (event) => {
-  const token = store.get('token');
-  if (!token) return;
-  const exportedPath = path.join(app.getPath('userData'), 'exported');
-  await handleBackupGallery(token, exportedPath, exportState, (current, total) => {
-    event.sender.send('export-progress', {
-      step: 'exportPosts',
-      progress: Math.round((current / total) * 100),
-      message: `Saving FC Gallery: ${current}/${total}`
-    });
-  });
-});
-
-ipcMain.handle('step-movies-export', async (event) => {
-  const token = store.get('token');
-  if (!token) return;
-  const exportedPath = path.join(app.getPath('userData'), 'exported');
-  await handleBackupMovies(token, exportedPath, exportState, (current, total) => {
-    event.sender.send('export-progress', {
-      step: 'exportPosts',
-      progress: Math.round((current / total) * 100),
-      message: `Saving FC Movies: ${current}/${total}`
-    });
-  });
-});
+ipcMain.handle('control-pause',()=>{exportState.isPaused=true;return true;});
+ipcMain.handle('control-resume',()=>{exportState.isPaused=false;return true;});
+ipcMain.handle('control-cancel',()=>{exportState.isCancelled=true;exportState.isPaused=false;return true;});

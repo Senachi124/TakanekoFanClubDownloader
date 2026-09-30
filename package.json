@@ -1,14 +1,17 @@
 {
   "name": "takaneko-downloader",
   "productName": "Takaneko Fanclub Downloader",
-  "version": "1.2.3",
+  "version": "2.0.0",
   "description": "Takaneko Fanclub Content Downloader",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
-    "build:mac": "electron-builder --mac",
-    "build:win": "node scripts/prepare-windows-tools.js && electron-builder --win"
+    "build:mac": "electron-builder --mac --x64 --arm64",
+    "build:win": "node scripts/prepare-windows-tools.js && electron-builder --win",
+    "test": "node scripts/test.js",
+    "test:desktop": "electron scripts/smoke-desktop.js",
+    "check:release": "node scripts/check-release.js"
   },
   "author": "Takaneko Fan",
   "license": "MIT",
@@ -34,7 +37,9 @@
         "filter": [
           "yt-dlp.exe",
           "ffmpeg.exe",
-          "ffprobe.exe"
+          "ffprobe.exe",
+          "LICENSE*",
+          "NOTICE*"
         ]
       }
     ],
@@ -43,7 +48,8 @@
       "target": [
         "dmg",
         "zip"
-      ]
+      ],
+      "artifactName": "Takaneko-Fanclub-Downloader-${version}-macOS-${arch}.${ext}"
     },
     "win": {
       "target": [
@@ -63,7 +69,19 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Takaneko-Fanclub-Downloader-${version}-Windows-${arch}-Setup.${ext}"
+    },
+    "files": [
+      "src/**/*",
+      "server/local-reader/**/*",
+      "package.json",
+      "README.md",
+      "LICENSE",
+      "!**/*.test.js"
+    ],
+    "portable": {
+      "artifactName": "Takaneko-Fanclub-Downloader-${version}-Windows-${arch}-Portable.${ext}"
     }
   }
 }

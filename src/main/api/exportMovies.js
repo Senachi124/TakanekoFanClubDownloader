@@ -125,6 +125,7 @@ async function handleBackupMovies(token, rootExportPath, state, onProgress, sele
     try {
       const detailUrl = `https://api.takanekofc.com/movie/queries/getMovieDetail/${encodeURIComponent(item.id)}`;
       const detail = await fetchJson(detailUrl, token);
+      state?.onDetails?.();
 
       const releaseStr = formatDateForFilename(detail.displayDate || detail.createdAt);
       const title = detail.title || item.title || 'untitled';
@@ -182,6 +183,7 @@ async function handleBackupMovies(token, rootExportPath, state, onProgress, sele
       await fs.writeFile(path.join(movieFolder, 'index.md'), mdContent, 'utf-8');
       if (incomplete) throw new Error('One or more movie media downloads failed');
       await fs.writeFile(marker,String(item.id),'utf8');
+      if (selectedItem) return movieFolder;
 
     } catch (err) {
       if (selectedItem || state?.isCancelled) throw err;

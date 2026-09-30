@@ -215,6 +215,7 @@ async function handleBackupTopicsBlogs(token, rootPath, state, onProgress, selec
       continue;
     }
 
+    state?.onDetails?.();
     const releaseTime = detail.displayDate || detail.createdAt || summary.displayDate || Date.now();
     const releaseStr = formatDateForFilename(releaseTime);
     const safeTitle = (detail.title || 'untitled').replace(/[/\\:*?"<>|]/g, '_');
@@ -298,6 +299,7 @@ async function handleBackupTopicsBlogs(token, rootPath, state, onProgress, selec
     if (!hasDownloadError) {
       await fs.writeFile(path.join(postDir, POST_ID_FILENAME), articleId, 'utf-8');
     }
+    if (selectedArticle) return postDir;
 
     if (onProgress) {
       onProgress(i + 1, pending.length);

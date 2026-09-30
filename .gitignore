@@ -44,3 +44,11 @@ deployment-access.txt
 *.tar.gz
 __pycache__/
 .backup-state/
+
+# Private maintainer notes and runtime configuration
+.private-v2/
+server/private/
+*.sqlite*
+!package-lock.json
+!src/shared/*.json
+!server/*.example.json
