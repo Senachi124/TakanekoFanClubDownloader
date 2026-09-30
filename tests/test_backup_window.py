@@ -8,7 +8,7 @@ import sys
 import threading
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'server'))
 import backup_window as window
 import backup_worker as worker
@@ -39,11 +39,32 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(query.call_args.args[1][0].isoformat(),'2026-09-29T03:00:00+08:00')
 
     def test_enqueue_outside_window_persists_waiting_source_and_next_run(self):
-        with patch.object(window,'now',return_value=datetime.fromisoformat('2026-09-28T09:00:00+08:00')),patch.object(worker,'query') as query:
+        conn=MagicMock()
+        conn.execute.return_value.fetchone.side_effect=[{'nas_enabled':True,'nas_next_at':None,'nas_interval_minutes':30},{'id':'fixture'}]
+        with patch.object(window,'now',return_value=datetime.fromisoformat('2026-09-28T09:00:00+08:00')),patch.object(worker,'db') as db:
+            db.return_value.__enter__.return_value=conn
             worker.enqueue('scheduled')
-        self.assertIn("'waiting'",query.call_args.args[0])
-        self.assertEqual(query.call_args.args[1][1],'scheduled')
-        self.assertEqual(query.call_args.args[1][2].isoformat(),'2026-09-29T03:00:00+08:00')
+        insert=conn.execute.call_args_list[1].args
+        self.assertIn("'scheduled'",insert[0])
+        self.assertEqual(insert[1][1],'waiting')
+        self.assertEqual(insert[1][2].isoformat(),'2026-09-29T03:00:00+08:00')
+        self.assertEqual(conn.execute.call_args.args[1][0].isoformat(),'2026-09-29T03:30:00+08:00')
+
+    def test_elapsed_time_excludes_waiting_and_is_recorded_on_failure(self):
+        with patch.object(worker,'query') as query,patch.object(worker,'supervise_child',side_effect=RuntimeError('fixture')),patch.object(worker.time,'monotonic',side_effect=[10,75]):
+            with self.assertRaises(RuntimeError): worker.supervise({'id':'fixture','trigger':'manual'})
+        self.assertIn("status='running'",query.call_args_list[0].args[0])
+        self.assertEqual(query.call_args.args[1],(65,'fixture'))
+
+    def test_disabled_or_not_due_schedule_does_not_enqueue(self):
+        current=datetime.fromisoformat('2026-09-28T04:00:00+08:00')
+        for enabled,next_at in [(False,None),(True,datetime.fromisoformat('2026-09-28T05:00:00+08:00'))]:
+            conn=MagicMock()
+            conn.execute.return_value.fetchone.return_value={'nas_enabled':enabled,'nas_next_at':next_at}
+            with patch.object(window,'now',return_value=current),patch.object(worker,'db') as db:
+                db.return_value.__enter__.return_value=conn
+                self.assertIsNone(worker.enqueue('scheduled'))
+            self.assertEqual(conn.execute.call_count,1)
 
     @unittest.skipUnless(hasattr(signal,'setitimer'),'Linux deployment deadline')
     def test_deadline_interrupts_upload_readback_lock_and_backoff(self):
@@ -74,7 +95,7 @@ class WindowTests(unittest.TestCase):
             child=actual_popen([sys.executable,'-c','import time; time.sleep(20)'])
             children.append(child);return child
         with patch.object(window,'is_open',return_value=True),patch.object(window,'cutoff',return_value=time.time()+0.15),patch.object(worker.subprocess,'Popen',side_effect=spawn),patch.object(worker,'defer') as defer:
-            worker.supervise({'id':'scheduled','trigger':'scheduled'})
+            worker.supervise_child({'id':'scheduled','trigger':'scheduled'})
         self.assertIsNotNone(children[0].poll())
         defer.assert_called_once_with('scheduled')
 

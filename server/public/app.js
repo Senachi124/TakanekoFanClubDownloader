@@ -2,14 +2,17 @@ const $ = id => document.getElementById(id);
 let csrf = '', offset = 0, job = null, lastCount = -1, member = null, requestSerial = 0, mediaItems = [], mediaIndex = 0;
 const multimedia = location.pathname === '/library';
 const browsing = multimedia || location.pathname === '/browse';
-$('downloadsPage').hidden = browsing;
+const backingUp = location.pathname === '/backup';
+let activityOffset = 0, activitySerial = 0;
+$('downloadsPage').hidden = browsing || backingUp;
+$('backupPage').hidden = !backingUp;
 $('browsePage').hidden = !browsing;
-$('settingsToggle').hidden = browsing;
-$('pageTitle').textContent = multimedia ? '你的多媒體庫。' : browsing ? '你的內容庫。' : '下載與備份。';
-$('pageEyebrow').textContent = multimedia ? 'TAKANEKO / MEDIA' : browsing ? 'TAKANEKO / COLLECTION' : 'TAKANEKO / BACKUP';
-$(multimedia ? 'libraryLink' : browsing ? 'browseLink' : 'downloadsLink').setAttribute('aria-current', 'page');
+$('settingsToggle').hidden = !backingUp;
+$('pageTitle').textContent = multimedia ? '你的多媒體庫。' : browsing ? '你的內容庫。' : backingUp ? 'NAS 與排程。' : '抓取投稿。';
+$('pageEyebrow').textContent = multimedia ? 'TAKANEKO / MEDIA' : browsing ? 'TAKANEKO / COLLECTION' : backingUp ? 'TAKANEKO / BACKUP' : 'TAKANEKO / DOWNLOAD';
+$(multimedia ? 'libraryLink' : browsing ? 'browseLink' : backingUp ? 'backupLink' : 'downloadsLink').setAttribute('aria-current', 'page');
 $('mediaFilter').hidden = !multimedia;
-document.title = multimedia ? '多媒體庫 · Takaneko' : browsing ? '瀏覽內容 · Takaneko' : '下載與備份 · Takaneko';
+document.title = multimedia ? '多媒體庫 · Takaneko' : browsing ? '瀏覽內容 · Takaneko' : backingUp ? 'NAS 與排程 · Takaneko' : '抓取投稿 · Takaneko';
 const initialMember = new URLSearchParams(location.search).get('member');
 if (initialMember) member = initialMember;
 function displayDate(value) {
@@ -26,7 +29,8 @@ async function api(path, data) {
 }
 function notice(text) { $('notice').textContent = text; $('notice').hidden = false; }
 function showLogin() {
-  requestSerial++; lastCount = -1;
+  requestSerial++; activitySerial++; lastCount = -1;
+  $('activityList').replaceChildren();
   $('detail').close(); $('mediaDetail').close();
   $('posts').replaceChildren(); mediaItems = [];
   $('login').hidden = false; $('workspace').hidden = true; $('logout').hidden = true;
@@ -35,7 +39,8 @@ async function refresh() {
   const data = await api('/api/status');
   csrf = data.csrf;
   $('login').hidden = true; $('workspace').hidden = false; $('logout').hidden = false;
-  if (!data.hasToken) $('settings').hidden = false;
+  if (backingUp && !data.hasToken) $('settings').hidden = false;
+  $('loginSettingsLink').hidden = data.hasToken;
   $('tokenState').textContent = data.hasToken ? '已匯入登入資料' : '尚未匯入登入資料';
   if (!document.activeElement.closest('#settingsForm')) {
     $('concurrency').value = data.settings.concurrency; $('blogs').checked = data.settings.blogs;
@@ -44,13 +49,16 @@ async function refresh() {
   const active = job && ['queued', 'running', 'paused'].includes(job.status);
   $('start').disabled = !!active || !data.hasToken;
   $('pause').disabled = !active; $('cancel').disabled = !active;
+  $('pause').hidden = $('cancel').hidden = !active;
   $('pause').textContent = job?.command === 'pause' ? '繼續' : '暫停';
   const labels = { queued:'準備中', running:'下載中', paused:'已暫停', completed:'已完成', failed:'需要處理', cancelled:'已停止' };
   $('jobLabel').textContent = labels[job?.status] || '待命';
   $('jobMessage').textContent = job?.message || (data.hasToken ? '準備好了，隨時可以開始下載。' : '匯入 Fanclub cookies／登入資料，即可開始下載。');
   $('progress').value = job?.total ? job.completed / job.total * 100 : 0;
+  $('fetchPercent').textContent = `${Math.floor($('progress').value)}%`;
   $('jobCount').textContent = job ? `${job.completed} / ${job.total} 篇${job.failed ? ` · ${job.failed} 篇需重試` : ''}` : '尚未開始';
   $('postCount').textContent = data.stats.posts;
+  $('lastFetch').textContent = data.lastFetch ? `${displayDate(data.lastFetch.updated_at)} · ${statusLabel(data.lastFetch)}` : '尚無紀錄';
   $('backedUp').textContent = data.stats.backed_up;
   if (!document.activeElement.closest('#autoForm')) {
     $('autoEnabled').checked = data.settings.auto_enabled;
@@ -60,6 +68,14 @@ async function refresh() {
   $('autoMessage').textContent = data.settings.auto_message;
   const next = data.settings.auto_next_at;
   $('autoNext').textContent = data.settings.auto_enabled && next ? `下次檢查：${displayDate(next)}（香港時間）；排程每 5 分鐘確認一次。` : '手動下載仍可隨時使用。';
+  if (!document.activeElement.closest('#nasForm')) {
+    $('nasEnabled').checked = data.settings.nas_enabled;
+    $('nasMinutes').value = data.settings.nas_interval_minutes;
+  }
+  $('nasScheduleState').textContent = data.settings.nas_enabled ? '已啟用' : '已停用';
+  $('nasNext').textContent = !data.settings.nas_enabled ? '自動備份已停用，手動備份仍可使用。' : data.settings.nas_next_at ? `下次檢查最早於：${displayDate(data.settings.nas_next_at)}；如已過期則於下一個備份窗口檢查。` : '下一個備份窗口開始檢查。';
+  $('lastBackup').textContent = data.lastBackup ? `${displayDate(data.lastBackup.finished_at || data.lastBackup.updated_at)} · ${statusLabel(data.lastBackup)}` : '尚無傳送紀錄';
+  $('lastBackupDuration').textContent = `耗時：${data.lastBackup ? duration(data.lastBackup) : '尚無紀錄'}`;
   const backup = data.backup;
   const backupActive = backup && ['queued','running'].includes(backup.status);
   $('backupStart').disabled = data.manualBackupBusy;
@@ -76,6 +92,32 @@ async function refresh() {
   $('backupPending').textContent = `${data.backupPending.toLocaleString()} 篇待備份／整理`;
   $('backupWarning').hidden = !data.stats.backup_errors;
   if (browsing && lastCount !== data.stats.posts) { await loadPosts(); lastCount = data.stats.posts; }
+  if (backingUp) await loadActivity();
+}
+function statusLabel(item) {
+  if (item.status === 'completed' && item.failed) return '部分失敗';
+  return {queued:'排隊中',running:'執行中',paused:'已暫停',completed:'成功',failed:'失敗',cancelled:'已停止',waiting:'等待續傳'}[item.status] || item.status;
+}
+function duration(item) {
+  if (!item.duration_known) return '未記錄';
+  const seconds = Math.floor(item.elapsed_seconds || 0);
+  return seconds >= 3600 ? `${Math.floor(seconds / 3600)} 小時 ${Math.floor(seconds % 3600 / 60)} 分 ${seconds % 60} 秒` : seconds >= 60 ? `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒` : `${seconds} 秒`;
+}
+async function loadActivity() {
+  const serial = ++activitySerial;
+  const data = await api(`/api/activity?kind=${$('activityKind').value}&offset=${activityOffset}`);
+  if (serial !== activitySerial) return;
+  const rows = data.items.map(item => {
+    const row = document.createElement('article'); row.className = 'activity-row';
+    const title = document.createElement('strong'); title.textContent = `${item.kind === 'nas' ? 'NAS 備份' : '抓取投稿'} · ${statusLabel(item)}`;
+    const meta = document.createElement('small'); meta.textContent = `${displayDate(item.created_at)} · ${item.trigger === 'manual' ? '手動' : '自動'} · ${item.completed} / ${item.total} 篇${item.failed ? ` · ${item.failed} 篇失敗` : ''}${item.kind === 'nas' ? ` · 耗時 ${duration(item)}` : ''}`;
+    const message = document.createElement('p'); message.textContent = item.message || '—';
+    row.append(title, meta, message); return row;
+  });
+  if (!rows.length) { const empty = document.createElement('p'); empty.className = 'help'; empty.textContent = '尚無執行紀錄'; rows.push(empty); }
+  $('activityList').replaceChildren(...rows);
+  $('activityPrevious').disabled = activityOffset === 0; $('activityNext').disabled = !data.hasMore;
+  $('activityPage').textContent = `第 ${activityOffset / 50 + 1} 頁`;
 }
 async function loadPosts() {
   const serial = ++requestSerial;
@@ -89,16 +131,16 @@ async function loadPosts() {
   } finally { if (serial === requestSerial) $('posts').setAttribute('aria-busy', 'false'); }
   if (serial !== requestSerial) return;
   member = data.member;
-  $('memberTabs').replaceChildren(...data.members.map(name => {
-    const tab = document.createElement('button'); tab.type = 'button'; tab.className = 'member-tab'; tab.textContent = name;
+  $('memberTabs').replaceChildren(...[null, ...data.members].map(name => {
+    const tab = document.createElement('button'); tab.type = 'button'; tab.className = 'member-tab'; tab.textContent = name ?? '全部';
     tab.setAttribute('aria-pressed', String(name === member));
     tab.addEventListener('click', action(async () => { member = name; offset = 0; await loadPosts(); }));
     return tab;
   }));
-  const memberQuery = '?member=' + encodeURIComponent(member);
+  const memberQuery = member === null ? '' : '?member=' + encodeURIComponent(member);
   $('browseLink').href = '/browse' + memberQuery; $('libraryLink').href = '/library' + memberQuery;
   history.replaceState(null, '', location.pathname + memberQuery);
-  $('collectionTitle').textContent = `${member || '成員'} · ${multimedia ? '多媒體庫' : '投稿'}`;
+  $('collectionTitle').textContent = `${member || '全部成員'} · ${multimedia ? '多媒體庫' : '投稿'}`;
   $('browseCount').textContent = `${data.total.toLocaleString()} ${multimedia ? '個媒體' : '篇投稿'}`;
   $('posts').replaceChildren();
   const items = multimedia ? data.media : data.posts;
@@ -183,8 +225,15 @@ $('importForm').addEventListener('submit', action(async () => {
 }));
 $('autoForm').addEventListener('submit', action(async () => {
   await api('/api/automation', { enabled: $('autoEnabled').checked, intervalHours: Number($('autoHours').value) });
-  notice('自動備份排程已儲存。'); await refresh();
+  notice('自動抓取排程已儲存。'); await refresh();
 }));
+$('nasForm').addEventListener('submit', action(async () => {
+  await api('/api/nas-settings', { enabled: $('nasEnabled').checked, intervalMinutes: Number($('nasMinutes').value) });
+  notice('NAS 排程已儲存。'); await refresh();
+}));
+$('activityKind').addEventListener('change', action(async () => { activityOffset = 0; await loadActivity(); }));
+$('activityPrevious').addEventListener('click', action(async () => { activityOffset = Math.max(0,activityOffset - 50); await loadActivity(); }));
+$('activityNext').addEventListener('click', action(async () => { activityOffset += 50; await loadActivity(); }));
 $('start').addEventListener('click', action(async () => { await api('/api/start', {}); await refresh(); }));
 $('backupStart').addEventListener('click', action(async () => { $('backupStart').disabled = true; try { await api('/api/backup', {}); await refresh(); } catch (error) { $('backupStart').disabled = false; throw error; } }));
 $('pause').addEventListener('click', action(async () => { await api('/api/control', { command: job?.command === 'pause' ? 'run' : 'pause' }); await refresh(); }));

@@ -21,6 +21,8 @@ from common import ROOT, CONTROL, query
 from fanclub_auth import save_import
 from library import collection
 from backup_window import HK
+from backup_window import now as hk_now, is_open, next_window
+from activity import history, BACKUP_FIELDS
 
 sys.path.insert(0, '/opt/vm1-backup')
 from vm1_backup import NAS
@@ -114,8 +116,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def get(self):
         url = urlsplit(self.path)
-        if url.path in ('/', '/downloads', '/browse', '/library', '/app.js', '/style.css'):
-            name = {'/': 'index.html', '/downloads': 'index.html', '/browse': 'index.html', '/library': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}[url.path]
+        if url.path in ('/', '/downloads', '/backup', '/browse', '/library', '/app.js', '/style.css'):
+            name = {'/': 'index.html', '/downloads': 'index.html', '/backup':'index.html', '/browse': 'index.html', '/library': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}[url.path]
             mime = {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name]
             content = (PUBLIC / name).read_bytes()
             if name == 'index.html':
@@ -130,9 +132,14 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(200, {'csrf': session['csrf'], 'hasToken': (CONTROL / 'session.json').exists() or (CONTROL / 'token').exists(),
                                     'settings': query('SELECT * FROM settings WHERE id=1', one=True),
                                     'job': query('SELECT * FROM jobs ORDER BY created_at DESC LIMIT 1', one=True), 'stats': stats,
-                                    'backup': query("SELECT id,status,trigger,total,completed,failed,files_done,bytes_done,current_item,message,created_at,updated_at,next_run_at FROM backup_jobs ORDER BY CASE status WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'waiting' THEN 2 ELSE 3 END,created_at DESC LIMIT 1", one=True),
+                                    'lastFetch': query("SELECT status,failed,updated_at FROM jobs WHERE status IN ('completed','failed','cancelled') ORDER BY updated_at DESC,id LIMIT 1",one=True),
+                                    'lastBackup': query(f"SELECT {BACKUP_FIELDS} FROM backup_jobs WHERE status IN ('completed','failed') AND (files_done>0 OR status='failed') ORDER BY updated_at DESC,id LIMIT 1",one=True),
+                                    'backup': query(f"SELECT {BACKUP_FIELDS} FROM backup_jobs ORDER BY CASE status WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'waiting' THEN 2 ELSE 3 END,created_at DESC LIMIT 1", one=True),
                                     'manualBackupBusy': bool(query("SELECT 1 FROM backup_jobs WHERE trigger='manual' AND status IN ('queued','running') LIMIT 1",one=True)),
                                     'backupPending': query('SELECT count(*) AS count FROM posts WHERE NOT nas_layout_ready', one=True)['count']})
+        if url.path == '/api/activity':
+            try: return self.respond(200,history(parse_qs(url.query)))
+            except ValueError: return self.respond(400,{'error':'請檢查紀錄篩選條件。'})
         if url.path in ('/api/posts', '/api/library'):
             try: result = collection(parse_qs(url.query), multimedia=url.path == '/api/library')
             except ValueError: return self.respond(400, {'error': '請檢查頁碼與媒體類型。'})
@@ -183,6 +190,13 @@ class Handler(BaseHTTPRequestHandler):
                 query("UPDATE settings SET auto_enabled=%s,auto_interval_hours=%s,auto_next_at=CASE WHEN %s THEN now() ELSE NULL END,auto_message=%s WHERE id=1",
                       (enabled, hours, enabled, '等待排程檢查' if enabled else '已停用'))
                 return self.respond(200, {'ok': True})
+            if self.path == '/api/nas-settings':
+                enabled, minutes = data['enabled'], int(data['intervalMinutes'])
+                if not isinstance(enabled,bool) or minutes not in (15,30,60,120,180,360): raise ValueError('NAS schedule')
+                current = hk_now()
+                due = current if is_open(current) else next_window(current)
+                query('UPDATE settings SET nas_enabled=%s,nas_interval_minutes=%s,nas_next_at=%s WHERE id=1',(enabled,minutes,due if enabled else None))
+                return self.respond(200,{'ok':True})
             if self.path == '/api/start':
                 if not ((CONTROL / 'session.json').exists() or (CONTROL / 'token').exists()): return self.respond(400, {'error': '請先匯入 Fanclub cookies／登入資料。'})
                 if query("SELECT 1 FROM jobs WHERE status IN ('queued','running','paused') LIMIT 1", one=True):

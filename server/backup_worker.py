@@ -18,9 +18,20 @@ import vm1_backup as backup
 
 def enqueue(trigger='manual'):
     if trigger not in ('manual','scheduled'): raise ValueError('Invalid backup trigger')
-    if trigger=='scheduled' and not window.is_open():
-        return query("INSERT INTO backup_jobs(id,trigger,status,next_run_at,message) VALUES(%s,%s,'waiting',%s,'待香港時間 03:00 窗口續傳') ON CONFLICT DO NOTHING RETURNING id",(uuid.uuid4().hex,trigger,window.next_window()),one=True)
-    return query('INSERT INTO backup_jobs(id,trigger) VALUES(%s,%s) ON CONFLICT DO NOTHING RETURNING id', (uuid.uuid4().hex,trigger), one=True)
+    if trigger=='manual':
+        return query('INSERT INTO backup_jobs(id,trigger) VALUES(%s,%s) ON CONFLICT DO NOTHING RETURNING id', (uuid.uuid4().hex,trigger), one=True)
+    with db() as conn:
+        settings = conn.execute('SELECT * FROM settings WHERE id=1 FOR UPDATE').fetchone()
+        current = window.now()
+        if not settings['nas_enabled'] or (settings['nas_next_at'] and settings['nas_next_at']>current): return
+        due = current if window.is_open(current) else window.next_window(current)
+        job = conn.execute("INSERT INTO backup_jobs(id,trigger,status,next_run_at,message) VALUES(%s,'scheduled',%s,%s,%s) ON CONFLICT DO NOTHING RETURNING id",
+                           (uuid.uuid4().hex,'queued' if window.is_open(current) else 'waiting',due,'等待備份程序' if window.is_open(current) else '待香港時間 03:00 窗口續傳')).fetchone()
+        if job:
+            next_run = due + timedelta(minutes=settings['nas_interval_minutes'])
+            if not window.is_open(next_run): next_run = window.next_window(due)
+            conn.execute('UPDATE settings SET nas_next_at=%s WHERE id=1',(next_run,))
+        return job
 
 
 def nas_folder(post):
@@ -131,7 +142,7 @@ def run_job(job, deadline=None):
                 if job.get('trigger') == 'scheduled': defer(job_id, retry=True)
                 else: query("UPDATE backup_jobs SET status='failed',failed=failed+1,message='NAS 備份未完成；本機內容保留，可手動重試。下載繼續運作。',updated_at=now() WHERE id=%s",(job_id,))
                 return
-        query("UPDATE backup_jobs SET status='completed',current_item='',message='NAS 備份及回讀校驗完成',updated_at=now() WHERE id=%s",(job_id,))
+        query("UPDATE backup_jobs SET status='completed',current_item='',message=%s,updated_at=now() WHERE id=%s",('NAS 備份及回讀校驗完成' if posts else '沒有待備份內容',job_id))
     finally: backup.NAS = original_nas
 
 
@@ -145,18 +156,27 @@ def defer(job_id, retry=False):
 
 def recover():
     # Preserve the explicit source: an automatic retry never acquires manual privileges.
-    query("UPDATE backup_jobs SET status='queued',message='服務恢復，保留進度繼續',updated_at=now() WHERE status='running'")
+    query("UPDATE backup_jobs SET status='queued',duration_known=false,message='服務恢復，保留進度繼續',updated_at=now() WHERE status='running'")
     if not window.is_open():
         query("UPDATE backup_jobs SET status='waiting',next_run_at=%s,message='待香港時間 03:00 窗口續傳',updated_at=now() WHERE trigger='scheduled' AND status IN ('queued','waiting') AND next_run_at<%s",(window.next_window(),window.next_window()))
 
 
 def next_job():
     return query("""SELECT * FROM backup_jobs WHERE status IN ('queued','waiting') AND next_run_at<=%s
-                    AND (trigger='manual' OR (trigger='scheduled' AND %s))
+                    AND (trigger='manual' OR (trigger='scheduled' AND %s AND (SELECT nas_enabled FROM settings WHERE id=1)))
                     ORDER BY (trigger='manual') DESC,created_at LIMIT 1""",(window.now(),window.is_open()),one=True)
 
 
 def supervise(job):
+    if job['trigger']=='scheduled' and not window.is_open(): defer(job['id']); return
+    query("UPDATE backup_jobs SET status='running',duration_known=CASE WHEN started_at IS NULL THEN true ELSE duration_known END,started_at=COALESCE(started_at,now()),finished_at=NULL WHERE id=%s",(job['id'],))
+    started = time.monotonic()
+    try: supervise_child(job)
+    finally:
+        query("UPDATE backup_jobs SET elapsed_seconds=elapsed_seconds+%s,finished_at=CASE WHEN status IN ('completed','failed') THEN now() ELSE NULL END WHERE id=%s",(max(0,time.monotonic()-started),job['id']))
+
+
+def supervise_child(job):
     deadline = window.cutoff() if job['trigger']=='scheduled' else None
     if deadline is not None and not window.is_open(): defer(job['id']); return
     args = [sys.executable,str(Path(__file__).resolve()),'--job',job['id']]

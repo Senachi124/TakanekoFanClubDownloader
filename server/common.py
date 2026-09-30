@@ -45,6 +45,9 @@ def initialize():
         ALTER TABLE settings ADD COLUMN IF NOT EXISTS auto_next_at timestamptz DEFAULT now();
         ALTER TABLE settings ADD COLUMN IF NOT EXISTS auto_last_at timestamptz;
         ALTER TABLE settings ADD COLUMN IF NOT EXISTS auto_message text NOT NULL DEFAULT '等待排程檢查';
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS nas_enabled boolean NOT NULL DEFAULT true;
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS nas_interval_minutes integer NOT NULL DEFAULT 15 CHECK(nas_interval_minutes IN (15,30,60,120,180,360));
+        ALTER TABLE settings ADD COLUMN IF NOT EXISTS nas_next_at timestamptz;
         CREATE TABLE IF NOT EXISTS jobs (
           id text PRIMARY KEY, status text NOT NULL, command text NOT NULL DEFAULT 'run',
           total integer NOT NULL DEFAULT 0, completed integer NOT NULL DEFAULT 0,
@@ -69,6 +72,10 @@ def initialize():
           created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
         ALTER TABLE backup_jobs ADD COLUMN IF NOT EXISTS next_run_at timestamptz NOT NULL DEFAULT now();
         ALTER TABLE backup_jobs ADD COLUMN IF NOT EXISTS verified_files jsonb NOT NULL DEFAULT '{}';
+        ALTER TABLE backup_jobs ADD COLUMN IF NOT EXISTS started_at timestamptz;
+        ALTER TABLE backup_jobs ADD COLUMN IF NOT EXISTS finished_at timestamptz;
+        ALTER TABLE backup_jobs ADD COLUMN IF NOT EXISTS elapsed_seconds double precision NOT NULL DEFAULT 0;
+        ALTER TABLE backup_jobs ADD COLUMN IF NOT EXISTS duration_known boolean NOT NULL DEFAULT false;
         DROP INDEX IF EXISTS one_active_backup;
         CREATE UNIQUE INDEX IF NOT EXISTS one_pending_backup_per_trigger ON backup_jobs (trigger) WHERE status IN ('queued','running','waiting');
         CREATE TABLE IF NOT EXISTS desktop_imports (
