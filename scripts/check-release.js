@@ -12,6 +12,8 @@ if(process.argv.includes('--packages')) {
     for(const name of files)assert.ok(/^\/(?:src|server|node_modules)(?:\/|$)|^\/(?:package.json|README.md|LICENSE)$/.test(name),name);
     for(const name of files.filter(n=>n.startsWith('/server/')))assert.ok(name==='/server/local-reader'||name.startsWith('/server/local-reader/'),name);
     const packed=JSON.parse(asar.extractFile(file,'package.json'));assert.equal(packed.version,pkg.version);checked++;
+    const tools=path.join(path.dirname(file),'tools/windows');
+    if(fs.existsSync(tools))for(const name of ['yt-dlp.exe','ffmpeg.exe','ffprobe.exe','deno.exe','LICENSE-DENO.txt'])assert.ok(fs.existsSync(path.join(tools,name)),`Missing bundled tool: ${name}`);
   }}};
   walk('dist');assert.ok(checked>0,'No packaged app.asar found');
 }

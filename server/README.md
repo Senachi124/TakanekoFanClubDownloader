@@ -15,9 +15,9 @@ v2.0.1：NAS 完成校驗後同步發布共用閱讀索引，讓本地 Reader �
 - `deployment/vm1/`：既有 shared helper 環境的部署範本。／shared helper 環境向けテンプレート。
 - `tests/`：隔離測試。／隔離テスト。
 
-伺服器需 Python 3.11+、Node.js 20+、PostgreSQL、`requirements.txt`、yt-dlp／ffmpeg，及管理員提供的 `vm1-backup` helper。範本不安裝／修改共用 helper。
+伺服器需 Python 3.11+、Node.js 22+、PostgreSQL、`requirements.txt`、yt-dlp／ffmpeg，及管理員提供的 `vm1-backup` helper。範本不安裝／修改共用 helper。
 
-サーバーには Python 3.11+・Node.js 20+・PostgreSQL・Python 依存関係・動画ツール・管理者提供の `vm1-backup` が必要です。shared helper は変更しません。
+サーバーには Python 3.11+・Node.js 22+・PostgreSQL・Python 依存関係・動画ツール・管理者提供の `vm1-backup` が必要です。shared helper は変更しません。
 
 | 環境變數／変数 | 用途／用途 |
 |---|---|
@@ -71,3 +71,5 @@ v2 は `jobs.progress`、v2.0.1 は `jobs.errors` を追加し旧列を維持し
 Web の「ログインとダウンロード設定」に、エクスポート手順、貼り付け・ファイル選択、削除機能があります。管理者認証、同一オリジン、CSRF 検証後に youtube.com の Netscape cookies のみ保存します。API は設定済みかどうかだけ返します。非公開 CONTROL ディレクトリに 0640 で保存し、worker は動画ごとに一時コピーを作り、処理終了時にコピーを削除します。変更は次に開始する動画から有効です。cookies を Git、archive、NAS catalog、公開バックアップに含めないでください。
 
 桌面與伺服器憑證分開保存；設定成功不代表 YouTube 已允許存取。ローカル版とサーバーの認証情報は別々に保存されます。設定の保存は YouTube へのアクセス成功を保証しません。
+
+部署腳本在應用 release 內安裝經 SHA-256 核對的 yt-dlp 2026.08.19，並明確使用 Node.js 22+ 處理 YouTube JavaScript 驗證；不替換系統共用工具。／デプロイスクリプトは SHA-256 検証済み yt-dlp をアプリの release 内に配置し、YouTube の JavaScript 検証に Node.js 22+ を使用します。システム共通ツールは変更しません。

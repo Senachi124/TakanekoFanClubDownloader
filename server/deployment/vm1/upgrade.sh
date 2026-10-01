@@ -11,6 +11,8 @@ test -d "$previous"
 cd "$release"
 # Prepare dependencies before touching live processes.
 npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+node -e 'if(Number(process.versions.node.split(".")[0])<22)throw Error("Node.js 22+ required for YouTube")'
+python3 server/deployment/vm1/prepare-media-tools.py
 idle() {
   runuser -u takanekowork -g takaneko-read -- python3 "$release/server/deployment/vm1/check-idle.py"
   for unit in takaneko-auto.service takaneko-nas.service; do

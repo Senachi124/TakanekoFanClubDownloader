@@ -105,6 +105,7 @@ async function downloadWithYtDlp(source, destPath) {
     source.url
   ];
   const tools = getYtDlpConfig();
+  if(source.type==='youtube') ytdlpArgs.unshift(...(tools.youtubeArgs || []));
   if(tools.ffmpegLocation) ytdlpArgs.unshift('--ffmpeg-location',tools.ffmpegLocation);
   await withVideoSlot(()=>youtubeCookies.withSnapshot(source, cookieArgs => runCommand(tools.command, [...cookieArgs, ...ytdlpArgs])));
 }

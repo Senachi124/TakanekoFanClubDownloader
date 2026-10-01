@@ -1,7 +1,7 @@
 {
   "name": "takaneko-downloader",
   "productName": "Takaneko Fanclub Downloader",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Takaneko Fanclub Content Downloader",
   "main": "src/main/main.js",
   "scripts": {
@@ -38,6 +38,7 @@
           "yt-dlp.exe",
           "ffmpeg.exe",
           "ffprobe.exe",
+          "deno.exe",
           "LICENSE*",
           "NOTICE*"
         ]

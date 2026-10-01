@@ -8,6 +8,8 @@ export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l
 apt-get update -qq
 apt-get install -y --no-install-recommends npm ffmpeg yt-dlp python3-pil python3-psycopg
 npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+node -e 'if(Number(process.versions.node.split(".")[0])<22)throw Error("Node.js 22+ required for YouTube")'
+python3 server/deployment/vm1/prepare-media-tools.py
 getent group takaneko-read >/dev/null || groupadd --system takaneko-read
 getent group takaneko-control >/dev/null || groupadd --system takaneko-control
 id takanekowork >/dev/null 2>&1 || useradd --system --user-group --home-dir /var/lib/takaneko --shell /usr/sbin/nologin takanekowork

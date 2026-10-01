@@ -84,7 +84,7 @@ test('movies route YouTube/Vimeo, upgrade only known image hosts and preserve sa
   calls.push({command,args,options});const child=new EventEmitter();child.stdout=new EventEmitter();child.stderr=new EventEmitter();
   setTimeout(async()=>{child.stderr.emit('data','private video https://signed.example/?token=SECRET');if(!toolExit)await fs.writeFile(args[args.indexOf('-o')+1],'video');child.emit('close',toolExit);},0);return child;
  };
- vm.runInNewContext(await fs.readFile(filename,'utf8'),{module,console,process,setTimeout,URL,require:name=>name==='child_process'?{spawn}:name==='../utils/mediaTools'?{getYtDlpConfig:()=>({command:'fixture-yt-dlp'})}:localRequire(name)});
+ vm.runInNewContext(await fs.readFile(filename,'utf8'),{module,console,process,setTimeout,URL,require:name=>name==='child_process'?{spawn}:name==='../utils/mediaTools'?{getYtDlpConfig:()=>({command:'fixture-yt-dlp',youtubeArgs:['--js-runtimes','deno:fixture runtime']})}:localRequire(name)});
  const {handleBackupMovies,movieSource,movieThumbnail}=module.exports;
  const oldCookies=process.env.TAKANEKO_YOUTUBE_COOKIES;
  process.env.TAKANEKO_YOUTUBE_COOKIES=path.join(root,'private-cookies.txt');
@@ -93,6 +93,7 @@ test('movies route YouTube/Vimeo, upgrade only known image hosts and preserve sa
   const output=await handleBackupMovies('fixture',root,{},null,{id:'youtube-1'});
   assert.equal(calls[0].args.at(-1),'https://www.youtube.com/watch?v=AbC_dE-1234');assert.equal(calls[0].options.shell,false);
   assert.equal(calls[0].args[0],'--cookies');assert.ok(!calls[0].args.includes('synthetic-secret'));
+  assert.equal(calls[0].args[calls[0].args.indexOf('--js-runtimes')+1],'deno:fixture runtime');
   assert.notEqual(calls[0].args[1],process.env.TAKANEKO_YOUTUBE_COOKIES);
   await assert.rejects(fs.access(calls[0].args[1]),{code:'ENOENT'});
   assert.ok(requests.includes('https://img.youtube.com/vi/AbC_dE-1234/maxresdefault.jpg'));
