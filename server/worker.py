@@ -31,7 +31,8 @@ class Bridge:
     def __init__(self):
         self.process = subprocess.Popen(['node', str(Path(__file__).with_name('bridge.js'))],
                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                        text=True, bufsize=1)
+                                        text=True, bufsize=1,
+                                        env={**os.environ, 'TAKANEKO_YOUTUBE_COOKIES': str(CONTROL / 'youtube-cookies.txt')})
         self.lock = threading.Lock()
         self.pending = {}
         threading.Thread(target=self.read, daemon=True).start()

@@ -1,4 +1,4 @@
-const {ipcMain,dialog,app,protocol} = require('electron');
+const {ipcMain,dialog,app,protocol,shell} = require('electron');
 const fs = require('node:fs');
 const {Readable} = require('node:stream');
 const path = require('node:path');
@@ -17,6 +17,17 @@ function setup({store,state,getWindow}) {
     await ready[mode]; return readers[mode];
   }
   ipcMain.handle('get-login-status',()=>!!store.get('token'));
+  ipcMain.handle('youtube-cookies',(_event,value)=>{
+    const cookies=require('./utils/youtubeCookies');
+    if(!value) return cookies.status();
+    if(value.action==='save') return cookies.save(value.content);
+    if(value.action==='remove') return cookies.remove();
+    throw new Error('YOUTUBE_COOKIES_INVALID');
+  });
+  ipcMain.handle('open-youtube-help',(_event,key)=>{
+    const links={guide:'https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies',extensions:'https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp'};
+    if(Object.hasOwn(links,key)) return shell.openExternal(links[key]);
+  });
   ipcMain.handle('get-download-errors',()=>store.get('downloadErrors',[]));
   ipcMain.handle('save-v2-settings',(_e,value)=>{
     const settings={concurrency:normalizeConcurrency(value.concurrency),blogs:!!value.blogs,gallery:!!value.gallery,movies:!!value.movies};

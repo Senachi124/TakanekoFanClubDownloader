@@ -72,3 +72,9 @@ npm run build:mac
 桌面及共用功能在 `src/`；Reader adapter 在 `server/local-reader/` 並隨桌面包附上。伺服器、NAS、部署與自動化見 [server/README.md](server/README.md)，一般使用不需部署 server。
 
 デスクトップと共通処理は `src/`、同梱 Reader は `server/local-reader/` にあります。サーバー運用は [server/README.md](server/README.md) を参照してください。通常の利用では server は不要です。
+
+### YouTube 登入 / YouTube ログイン
+
+設定頁提供 YouTube cookies 匯出教學，可貼上或選取 Netscape cookies.txt，並儲存或移除。只保留 youtube.com 的資料，存於本機 userData；不會寫入 archive 或套件。Fanclub 內建登入及 Token 擷取維持原樣。「已儲存」只表示格式有效，影片是否可存取仍須實際下載確認。
+
+設定画面の手順に従い、YouTube の Netscape cookies.txt を貼り付けるか選択して保存・削除できます。youtube.com の情報のみローカル userData に保存し、archive や配布パッケージには含めません。Fanclub の内蔵ログインと Token 取得は従来どおりです。保存時は形式のみ確認し、動画へのアクセスはダウンロードで確認します。

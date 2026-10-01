@@ -63,3 +63,11 @@ v2 新增 `jobs.progress`，v2.0.1 新增 `jobs.errors` 欄位，保留舊欄位
 v2 は `jobs.progress`、v2.0.1 は `jobs.errors` を追加し旧列を維持します。ロールバックは前の互換 release に戻してアプリを再起動し、データは削除しません。確認後にバックアップ登録と非公開運用索引を更新してください。
 
 影片下載依 movieType 分流 YouTube／Vimeo；僅將已知 YouTube 圖片主機的 HTTP 封面升級 HTTPS。工作 errors 保存投稿 ID、階段及白名單錯誤碼；原始工具 stderr、網址、憑證不入紀錄。既有歷史失敗不猜測回填。／動画は movieType により YouTube と Vimeo に分岐します。既知の YouTube 画像ホストだけ HTTP を HTTPS に昇格します。エラー記録には ID・段階・許可済みコードだけを保存し、過去の原因は推測して補いません。
+
+### YouTube cookies 設定 / 設定方法
+
+網頁「登入與下載設定」含雙語匯出教學、貼上／選檔及移除功能。管理員登入、同來源及 CSRF 驗證後，只保存 youtube.com 的 Netscape cookies；API 只回傳是否已設定，不回傳原文。檔案存於私有 CONTROL 目錄，權限 0640；worker 用每次下載獨立的暫存副本供 yt-dlp 讀写，結束即移除副本。變更適用於之後開始的影片；不影響進行中的副本。不要把 cookies 加入 Git、archive、NAS catalog 或公開備份。
+
+Web の「ログインとダウンロード設定」に、エクスポート手順、貼り付け・ファイル選択、削除機能があります。管理者認証、同一オリジン、CSRF 検証後に youtube.com の Netscape cookies のみ保存します。API は設定済みかどうかだけ返します。非公開 CONTROL ディレクトリに 0640 で保存し、worker は動画ごとに一時コピーを作り、処理終了時にコピーを削除します。変更は次に開始する動画から有効です。cookies を Git、archive、NAS catalog、公開バックアップに含めないでください。
+
+桌面與伺服器憑證分開保存；設定成功不代表 YouTube 已允許存取。ローカル版とサーバーの認証情報は別々に保存されます。設定の保存は YouTube へのアクセス成功を保証しません。

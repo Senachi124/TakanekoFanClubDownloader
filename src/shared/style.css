@@ -12,3 +12,5 @@
 header{height:auto;min-height:112px;gap:16px;flex-wrap:wrap;padding-top:18px;padding-bottom:18px}.header-right{flex-wrap:wrap;justify-content:flex-end}@media(max-width:600px){header{min-height:90px}.header-right{justify-content:flex-start;gap:10px}}
 
 .download-errors{margin:16px 0;padding:14px;border:1px solid #e8ad7855;border-radius:8px;overflow-wrap:anywhere}.download-errors summary{cursor:pointer;color:#ffc88f}.download-errors li{margin:8px 0;font-size:13px}.download-errors code{font-size:12px}
+
+.youtube-settings{border-top:1px solid var(--border,#343442);margin-top:24px;padding-top:24px}.youtube-settings textarea{width:100%;box-sizing:border-box;font-family:monospace}.youtube-settings details{margin:16px 0}.youtube-guide{max-width:85ch}.youtube-guide a{display:inline-block;margin:4px 8px 4px 0}

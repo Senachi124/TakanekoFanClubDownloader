@@ -19,6 +19,7 @@ from urllib.parse import urlsplit, parse_qs
 import uuid
 from common import ROOT, CONTROL, query
 from fanclub_auth import save_import
+import youtube_auth
 from library import collection
 from backup_window import HK
 from backup_window import now as hk_now, is_open, next_window
@@ -116,7 +117,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def get(self):
         url = urlsplit(self.path)
-        if url.path in ('/shared/ui.js','/shared/web-translations.js'):
+        if url.path in ('/shared/ui.js','/shared/web-translations.js','/shared/youtube-settings.js'):
             return self.respond(200,(PUBLIC.parents[1]/'src/shared'/url.path.rsplit('/',1)[-1]).read_bytes(),mime='text/javascript; charset=utf-8')
         if url.path in ('/', '/downloads', '/backup', '/browse', '/library', '/app.js', '/style.css'):
             name = {'/': 'index.html', '/downloads': 'index.html', '/backup':'index.html', '/browse': 'index.html', '/library': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}[url.path]
@@ -129,6 +130,7 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == '/healthz': return self.respond(200, {'ok': True})
         session = self.session()
         if not session: return self.respond(401, {'error': '請先登入。'})
+        if url.path == '/api/youtube-cookies': return self.respond(200, youtube_auth.status())
         if url.path == '/api/status':
             stats = query('SELECT count(*) AS posts,count(*) FILTER(WHERE nas_available) AS backed_up,count(*) FILTER(WHERE transfer_error)+(SELECT count(*) FROM desktop_thumbnail_backups WHERE transfer_error) AS backup_errors FROM posts', one=True)
             return self.respond(200, {'csrf': session['csrf'], 'hasToken': (CONTROL / 'session.json').exists() or (CONTROL / 'token').exists(),
@@ -188,6 +190,12 @@ class Handler(BaseHTTPRequestHandler):
                 try: save_import(data.get('content'), data.get('refreshToken'))
                 except ValueError as error: return self.respond(400, {'error': str(error)})
                 return self.respond(200, {'ok': True})
+            if self.path == '/api/youtube-cookies':
+                try:
+                    if data.get('action') == 'remove': return self.respond(200, youtube_auth.remove())
+                    if data.get('action') != 'save': raise ValueError('YOUTUBE_COOKIES_INVALID')
+                    return self.respond(200, youtube_auth.save(data.get('content')))
+                except ValueError: return self.respond(400, {'error': 'YOUTUBE_COOKIES_INVALID'})
             if self.path == '/api/automation':
                 enabled = data['enabled']
                 hours = int(data['intervalHours'])

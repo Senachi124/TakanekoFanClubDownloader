@@ -7,6 +7,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { getYtDlpConfig } = require('../utils/mediaTools');
 const { withVideoSlot } = require('../utils/videoQueue');
+const youtubeCookies = require('../utils/youtubeCookies');
 const {failure, diagnostic} = require('../utils/downloadErrors');
 
 function movieSource(detail) {
@@ -105,7 +106,7 @@ async function downloadWithYtDlp(source, destPath) {
   ];
   const tools = getYtDlpConfig();
   if(tools.ffmpegLocation) ytdlpArgs.unshift('--ffmpeg-location',tools.ffmpegLocation);
-  await withVideoSlot(()=>runCommand(tools.command, ytdlpArgs));
+  await withVideoSlot(()=>youtubeCookies.withSnapshot(source, cookieArgs => runCommand(tools.command, [...cookieArgs, ...ytdlpArgs])));
 }
 
 async function handleBackupMovies(token, rootExportPath, state, onProgress, selectedItem = null) {

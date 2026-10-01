@@ -40,3 +40,6 @@ $('close').onclick=()=>$('detail').close();$('detail').onclose=()=>$('detailMedi
 window.takaneko.onProgress(p=>{lastProgress=p;UI.progress($('stages'),p);UI.errors($('downloadErrors'),p.errors);});window.addEventListener('languagechange',()=>{UI.progress($('stages'),lastProgress);if(['browse','reader'].includes(view))load();});
 setInterval(()=>{if(view==='reader' && !indexing)load(true).catch(()=>notice('無法讀取資料夾'));},60000);
 (async()=>{UI.init();UI.progress($('stages'));UI.errors($('downloadErrors'),await api('get-download-errors'));document.querySelector('[data-view="downloads"]').setAttribute('aria-selected','true');const info=await api('get-app-info');$('version').textContent=`${info.name} v${info.version}`;$('footerVersion').textContent=`v${info.version}`;const settings=await api('get-download-settings');$('concurrency').value=settings.concurrency;for(const key of ['blogs','gallery','movies']){const legacy=localStorage.getItem('backup'+key[0].toUpperCase()+key.slice(1));$(key).checked=settings.needsMigration && legacy!==null?legacy==='true':settings[key];}if(settings.needsMigration)await save();await loginStatus();})();
+
+const youtubeSettings=mountYouTubeSettings($('settings'),value=>api('youtube-cookies',value),key=>api('open-youtube-help',key));
+youtubeSettings.refresh();

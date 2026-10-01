@@ -86,9 +86,15 @@ test('movies route YouTube/Vimeo, upgrade only known image hosts and preserve sa
  };
  vm.runInNewContext(await fs.readFile(filename,'utf8'),{module,console,process,setTimeout,URL,require:name=>name==='child_process'?{spawn}:name==='../utils/mediaTools'?{getYtDlpConfig:()=>({command:'fixture-yt-dlp'})}:localRequire(name)});
  const {handleBackupMovies,movieSource,movieThumbnail}=module.exports;
+ const oldCookies=process.env.TAKANEKO_YOUTUBE_COOKIES;
+ process.env.TAKANEKO_YOUTUBE_COOKIES=path.join(root,'private-cookies.txt');
+ await fs.writeFile(process.env.TAKANEKO_YOUTUBE_COOKIES,'.youtube.com\tTRUE\t/\tTRUE\t0\tSID\tsynthetic-secret');
  try {
   const output=await handleBackupMovies('fixture',root,{},null,{id:'youtube-1'});
   assert.equal(calls[0].args.at(-1),'https://www.youtube.com/watch?v=AbC_dE-1234');assert.equal(calls[0].options.shell,false);
+  assert.equal(calls[0].args[0],'--cookies');assert.ok(!calls[0].args.includes('synthetic-secret'));
+  assert.notEqual(calls[0].args[1],process.env.TAKANEKO_YOUTUBE_COOKIES);
+  await assert.rejects(fs.access(calls[0].args[1]),{code:'ENOENT'});
   assert.ok(requests.includes('https://img.youtube.com/vi/AbC_dE-1234/maxresdefault.jpg'));
   assert.match(await fs.readFile(path.join(output,'index.md'),'utf8'),/\*\*YouTube ID\*\*/);
   assert.equal(movieSource({movieType:'vimeo',videoId:'12345/abcdef'}).url,'https://player.vimeo.com/video/12345?h=abcdef');
@@ -107,5 +113,5 @@ test('movies route YouTube/Vimeo, upgrade only known image hosts and preserve sa
   });
   const folders=await fs.readdir(path.join(root,'MOVIE'));const failedFolder=folders.find(f=>path.join(root,'MOVIE',f)!==output);
   await assert.rejects(fs.access(path.join(root,'MOVIE',failedFolder,'.post-id')),{code:'ENOENT'});
- }finally{global.fetch=previous;await fs.rm(root,{recursive:true,force:true});}
+ }finally{if(oldCookies===undefined)delete process.env.TAKANEKO_YOUTUBE_COOKIES;else process.env.TAKANEKO_YOUTUBE_COOKIES=oldCookies;global.fetch=previous;await fs.rm(root,{recursive:true,force:true});}
 });

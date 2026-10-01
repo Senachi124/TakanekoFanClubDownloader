@@ -50,6 +50,7 @@ AGENTS.md
 .private-v2/
 server/private/
 *.sqlite*
+*cookies*.txt
 !package-lock.json
 !src/shared/*.json
 !server/*.example.json

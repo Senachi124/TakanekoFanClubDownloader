@@ -29,7 +29,9 @@ async function api(path, data) {
   return result;
 }
 function notice(text) { $('notice').textContent = text; $('notice').hidden = false; }
+const youtubeSettings=mountYouTubeSettings($('settings'),data=>api('/api/youtube-cookies',data));
 function showLogin() {
+  youtubeSettings.clear();
   requestSerial++; activitySerial++; lastCount = -1;
   $('activityList').replaceChildren();
   $('detail').close(); $('mediaDetail').close();
@@ -39,6 +41,7 @@ function showLogin() {
 async function refresh() {
   const data = await api('/api/status');
   csrf = data.csrf;
+  if($('workspace').hidden) await youtubeSettings.refresh();
   $('login').hidden = true; $('workspace').hidden = false; $('logout').hidden = false;
   if (backingUp && !data.hasToken) $('settings').hidden = false;
   $('loginSettingsLink').hidden = data.hasToken;
@@ -205,7 +208,7 @@ $('loginForm').addEventListener('submit', async event => {
   catch (e) { $('loginError').textContent = e.message; }
 });
 $('logout').addEventListener('click', action(async () => { await api('/api/logout', {}); showLogin(); }));
-$('settingsToggle').addEventListener('click', () => { $('settings').hidden = !$('settings').hidden; });
+$('settingsToggle').addEventListener('click', () => { $('settings').hidden = !$('settings').hidden; if(!$('settings').hidden)youtubeSettings.refresh(); });
 $('settingsForm').addEventListener('submit', action(async () => {
   await api('/api/settings', { concurrency: Number($('concurrency').value), blogs: $('blogs').checked, gallery: $('gallery').checked, movies: $('movies').checked });
   notice('設定已儲存。'); await refresh();
