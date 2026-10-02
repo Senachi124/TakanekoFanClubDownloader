@@ -5,15 +5,16 @@ const path = require('node:path');
 const {ArchiveReader} = require('../../server/local-reader');
 const {downloadJob} = require('./downloadJob');
 const {normalizeConcurrency} = require('./utils/concurrency');
+const {saveMedia,savePost}=require('./archiveActions');
 function setup({store,state,getWindow}) {
   const cache=path.join(app.getPath('userData'),'reader-index');
   const readers = {local:new ArchiveReader(cache),reader:new ArchiveReader(cache)};
   const ready = {};
-  const exported=path.join(app.getPath('userData'),'exported');
+  const exported=()=>store.get('downloadRoot') || path.join(app.getPath('userData'),'exported');
   let running=false;
   async function getReader(mode) {
     mode=mode==='reader'?'reader':'local';
-    if(!ready[mode]) ready[mode]=readers[mode].select(mode==='reader'?(store.get('readerRoot') || exported):exported);
+    if(!ready[mode]) ready[mode]=readers[mode].select(mode==='reader'?(store.get('readerRoot') || exported()):exported());
     await ready[mode]; return readers[mode];
   }
   ipcMain.handle('get-login-status',()=>!!store.get('token'));
@@ -46,6 +47,39 @@ function setup({store,state,getWindow}) {
     const initialized=!!ready[mode], reader=await getReader(mode);
     return initialized?reader.scan():reader.summary();
   });
+  ipcMain.handle('get-folder-settings',()=>({downloadRoot:exported(),readerRoot:store.get('readerRoot') || exported()}));
+  ipcMain.handle('download-folder-select',async()=>{
+    if(running)return {error:'LOCATION_BUSY'};
+    const selection=await dialog.showOpenDialog(getWindow(),{defaultPath:exported(),properties:['openDirectory','createDirectory']});
+    if(selection.canceled)return {cancelled:true};
+    if(running)return {error:'LOCATION_BUSY'};
+    const root=await fs.promises.realpath(selection.filePaths[0]);
+    await fs.promises.access(root,fs.constants.W_OK);
+    store.set('downloadRoot',root);delete ready.local;
+    if(!store.get('readerRoot'))delete ready.reader;
+    return {saved:true};
+  });
+  // Only indexed IDs cross the preload boundary; renderer paths are never opened.
+  ipcMain.handle('archive-action',async(_e,mode,action,id)=>{
+    try {
+      const reader=await getReader(mode);
+      if(action==='reveal-media' || action==='reveal-post') {
+        const source=action==='reveal-media'?await reader.resolve(id):await reader.resolvePost(id);
+        shell.showItemInFolder(source.file);return {opened:true};
+      }
+      if(action==='save-media') {
+        const {file}=await reader.resolve(id);
+        const selection=await dialog.showSaveDialog(getWindow(),{defaultPath:path.join(exported(),path.basename(file))});
+        return selection.canceled?{cancelled:true}:await saveMedia(reader,id,selection.filePath);
+      }
+      if(action==='save-post') {
+        await reader.resolvePost(id);
+        const selection=await dialog.showOpenDialog(getWindow(),{defaultPath:exported(),properties:['openDirectory','createDirectory']});
+        return selection.canceled?{cancelled:true}:await savePost(reader,id,selection.filePaths[0]);
+      }
+      return {error:'INVALID_ACTION'};
+    } catch(error) {return {error:error.message==='SOURCE_READ_ONLY'?'SOURCE_READ_ONLY':'ARCHIVE_UNAVAILABLE'};}
+  });
   ipcMain.handle('reader-query',async(_e,mode,options)=>(await getReader(mode)).query(options));
   ipcMain.handle('reader-detail',async(_e,mode,key)=>(await getReader(mode)).detail(key));
   ipcMain.handle('start-download',async()=>{
@@ -53,11 +87,12 @@ function setup({store,state,getWindow}) {
     const token=store.get('token');if(!token) return {success:false,status:'loginRequired'};
     running=true;state.isPaused=false;state.isCancelled=false;let errorsSaved=-1;
     try {
-      const result=await downloadJob({token,directory:exported,cacheDirectory:cache,settings:{blogs:true,gallery:true,movies:true,...store.get('v2Settings',{}),concurrency:store.get('downloadConcurrency',5)},state,emit:p=>{
+      const directory=exported();
+      const result=await downloadJob({token,directory,cacheDirectory:cache,settings:{blogs:true,gallery:true,movies:true,...store.get('v2Settings',{}),concurrency:store.get('downloadConcurrency',5)},state,emit:p=>{
         if(errorsSaved!==(p.errors || []).length){store.set('downloadErrors',p.errors || []);errorsSaved=(p.errors || []).length;}
         if(!getWindow().isDestroyed())getWindow().webContents.send('job-progress',p);
       }});
-      ready.local=readers.local.select(exported);return result;
+      ready.local=readers.local.select(directory);if(!store.get('readerRoot'))delete ready.reader;return result;
     } catch {return {success:false,status:'failed'};} finally {running=false;}
   });
   protocol.handle('archive',async request=>{

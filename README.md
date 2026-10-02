@@ -10,14 +10,14 @@ Takaneko Fanclub の投稿・マネージャーブログ・Gallery・Movies を�
 
 ## 安裝／インストール
 
-在 [Releases](https://github.com/Senachi124/TakanekoFanClubDownloader/releases) 下載 v2.0.2，一般使用者不需 Node.js。／Releases から v2.0.2 を取得します。通常の利用では Node.js は不要です。
+在 [Releases](https://github.com/Senachi124/TakanekoFanClubDownloader/releases) 下載 v2.0.3，一般使用者不需 Node.js。／Releases から v2.0.3 を取得します。通常の利用では Node.js は不要です。
 
 | 平台／OS | 檔案／ファイル |
 |---|---|
-| Windows x64 安裝版／インストーラー | `Takaneko-Fanclub-Downloader-2.0.2-Windows-x64-Setup.exe` |
-| Windows x64 免安裝／ポータブル | `Takaneko-Fanclub-Downloader-2.0.2-Windows-x64-Portable.exe` |
-| macOS Intel | `Takaneko-Fanclub-Downloader-2.0.2-macOS-x64.dmg` / `.zip` |
-| macOS Apple Silicon | `Takaneko-Fanclub-Downloader-2.0.2-macOS-arm64.dmg` / `.zip` |
+| Windows x64 安裝版／インストーラー | `Takaneko-Fanclub-Downloader-2.0.3-Windows-x64-Setup.exe` |
+| Windows x64 免安裝／ポータブル | `Takaneko-Fanclub-Downloader-2.0.3-Windows-x64-Portable.exe` |
+| macOS Intel | `Takaneko-Fanclub-Downloader-2.0.3-macOS-x64.dmg` / `.zip` |
+| macOS Apple Silicon | `Takaneko-Fanclub-Downloader-2.0.3-macOS-arm64.dmg` / `.zip` |
 
 Windows 內附 yt-dlp、ffmpeg、ffprobe 及 Deno。macOS 影片下載需要在 PATH 提供最新版 yt-dlp、ffmpeg／ffprobe，及 Deno 2.3+ 或 Node.js 22+；圖片及 Reader 不需要。Release 附 SHA-256 校驗值；安裝包不含私人帳戶及 archive。
 
@@ -33,7 +33,8 @@ v2 は 1.2.1 以降のアプリ ID・名前・データ領域を維持します�
 2. 設定並發 1–100，預設 5；選擇 Blogs／Gallery／Movies。影片同時最多 2 個。／並列数は 1–100、既定値 5。対象を選択します。動画は同時に最大 2 件です。
 3. 在下載 tab 開始；三條進度為清單、詳情檢查、媒體下載及保存。／ダウンロードタブから開始し、一覧・詳細確認・保存の進捗を確認します。
 4. 可暫停、繼續或停止；已完成檔案保留，失敗可重試。／一時停止・再開・停止が可能です。完了分は保持し、失敗分を再試行できます。
-5. 「內容瀏覽」顯示本地下載；「本地閱讀器」可選擇其他 archive。／コンテンツ閲覧は取得済み内容、ローカルリーダーは選択フォルダーを表示します。
+5. 在「設定 → 瀏覽來源」選擇本機或已掛載 NAS 的 archive。「內容瀏覽」看投稿，「多媒體瀏覽」篩選圖片／影片，兩者與本地閱讀器共用來源。／「設定 → 閲覧元」でローカルまたはマウント済み NAS の archive を選択します。コンテンツ・メディア・ローカルリーダーは共通の閲覧元を使います。
+6. 開啟投稿或媒體後，可「下載原檔」到其他位置、「另存整篇投稿」，或開啟原檔資料夾。另存是複製，來源不變；缺檔或 NAS 離線時會提示失敗。／元ファイルや投稿全体を別の場所に保存したり、元ファイルのフォルダーを開けます。コピーなので元データは変わりません。欠損・切断時は失敗を表示します。
 
 「繁體中文／日本語」tabs 可切換並記住語言。時間顯示為香港 UTC+08:00、24 小時制；原始發布 metadata、檔名及存檔內容不變。
 
@@ -41,23 +42,23 @@ v2 は 1.2.1 以降のアプリ ID・名前・データ領域を維持します�
 
 ## Local Reader
 
-v2.0.2 優先讀取伺服器在 NAS 校驗完成後發布的共用 `catalog.json`，不逐一遍歷投稿資料夾。內文和媒體在開啟時讀取，索引期間顯示動畫進度列。可選 `members/`、`media/`、`takaneko/` 或包含 `takaneko/` 的根目錄。請保留 `.catalog/`；NAS 更新結束後最遲於下次 60 秒檢查载入新清單。沒有 catalog 的舊 archive 仍使用掃描。
+v2.0.3 優先讀取伺服器在 NAS 校驗完成後發布的共用 `catalog.json`，不逐一遍歷投稿資料夾。內文和媒體在開啟時讀取，索引期間顯示動畫進度列。可選 `members/`、`media/`、`takaneko/` 或包含 `takaneko/` 的根目錄。請保留 `.catalog/`；NAS 更新結束後最遲於下次 60 秒檢查载入新清單。沒有 catalog 的舊 archive 仍使用掃描。
 
-v2.0.2 は NAS 検証後の共通 `catalog.json` を優先し、投稿フォルダーの全走査を省きます。本文・メディアは開くときに読み込み、索引中は進捗バーを表示します。`members/`、`media/`、`takaneko/`、または `takaneko/` を含むルートを選択し、`.catalog/` を保持してください。更新は次の 60 秒確認で反映されます。catalog のない旧形式は従来どおり走査します。
+v2.0.3 は NAS 検証後の共通 `catalog.json` を優先し、投稿フォルダーの全走査を省きます。本文・メディアは開くときに読み込み、索引中は進捗バーを表示します。`members/`、`media/`、`takaneko/`、または `takaneko/` を含むルートを選択し、`.catalog/` を保持してください。更新は次の 60 秒確認で反映されます。catalog のない旧形式は従来どおり走査します。
 
 選擇本機、外接磁碟或已掛載 NAS 根目錄。支援桌面 `index.md`＋`.post-id`、server `record.json` v1 和 NAS v2；提供成員／分類篩選、48 件分頁、圖片及影片。Reader 開啟時每 60 秒檢查更新，也可手動重新整理。
 
 ローカル・外付けディスク・マウント済み NAS のルートを選択します。デスクトップ形式、server v1、NAS v2 に対応し、絞り込み・48 件分頁・画像・動画を提供します。表示中は 60 秒ごとに更新を確認します。
 
-Reader 不登入伺服器、不下載遠端 archive、不修改來源。索引存於 app 使用者資料目錄。離線時保留索引，缺失媒體顯示不可用。v1 相對連結必須位於所選根目錄內，建議選擇包含完整 `complete/` 的根目錄。
+Reader 直接讀取選定資料夾，不登入伺服器、不同步遠端 archive、不修改來源。使用者可另存選定的投稿或媒體至來源以外的位置。索引存於 app 使用者資料目錄。離線時保留索引，缺失媒體顯示不可用。v1 相對連結必須位於所選根目錄內，建議選擇包含完整 `complete/` 的根目錄。
 
-Reader は遠隔ログイン・ダウンロード・元ファイルの変更を行いません。索引はアプリのデータ領域に保存し、切断時も保持します。v1 の相対リンクを読む場合は `complete/` 全体を含むルートを選択してください。
+Reader は選択フォルダーを直接読み、遠隔ログイン・同期・元ファイルの変更を行いません。選択した投稿やメディアを閲覧元の外へコピーできます。索引はアプリのデータ領域に保存し、切断時も保持します。v1 の相対リンクを読む場合は `complete/` 全体を含むルートを選択してください。
 
 ## 資料與開發／データと開発
 
-下載位置為 Electron `userData/exported`，可按「開啟資料夾」。token 及偏好同樣存於使用者資料目錄，不寫入 Git。原有內建登入及 Token Capture 保留，請勿分享登入資料。
+「設定 → 下載位置」可更改新下載的目的地，並作為另存檔案的預設位置；預設仍為 Electron `userData/exported`。更改設定不搬移既有檔案。可按「開啟資料夾」。token 及偏好同樣存於使用者資料目錄，不寫入 Git。原有內建登入及 Token Capture 保留，請勿分享登入資料。
 
-保存先は Electron の `userData/exported` です。token と設定もユーザーデータ領域に保存し、Git に含めません。内蔵ログインと Token Capture を維持します。
+「設定 → 保存先」で新しいダウンロードと別名保存の既定の場所を変更できます。初期値は Electron の `userData/exported` です。既存ファイルは移動しません。token と設定もユーザーデータ領域に保存し、Git に含めません。内蔵ログインと Token Capture を維持します。
 
 ```sh
 npm ci

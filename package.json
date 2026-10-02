@@ -1,7 +1,7 @@
 {
   "name": "takaneko-downloader",
   "productName": "Takaneko Fanclub Downloader",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Takaneko Fanclub Content Downloader",
   "main": "src/main/main.js",
   "scripts": {

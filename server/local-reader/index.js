@@ -73,7 +73,7 @@ class ArchiveReader {
             const category = parts.includes('GALLERY') ? 'gallery' : parts.includes('MOVIE') ? 'movie' : parts.some(p => /BLOG|TOPICS|マネージャーブログ/i.test(p)) ? 'blog' : 'post';
             const sourceId = record?.source_id || (await fs.readFile((await safeFile(this.root,path.join(directory,'.post-id'))).file,'utf8')).trim();
             const key = record?.resource_key || `takaneko:${category}:${sourceId}:v1`;
-            const post = {key, sourceId, kind:record?.kind || category, title:record?.title || body.match(/^# (.+)$/m)?.[1] || path.basename(directory), member:record?.member || body.match(/\*\*Sender\*\*:\s*([^\n]+)/)?.[1]?.trim() || parts[0], date:record?.published_at || dateFromBody(body), body, media:[]};
+            const post = {key, sourceId, kind:record?.kind || category, title:record?.title || body.match(/^# (.+)$/m)?.[1] || path.basename(directory), member:record?.member || body.match(/\*\*Sender\*\*:\s*([^\n]+)/)?.[1]?.trim() || parts[0], date:record?.published_at || dateFromBody(body), textFilename:path.resolve(directory,record?.text || 'index.md'), body, media:[]};
             const candidates = record ? record.media || [] : entries.filter(e => e.isFile() && mime(e.name)).map(e => ({path:e.name,variant:'original'}));
             for (const item of candidates) {
               const relative = item.path || item.local_path;
@@ -132,5 +132,10 @@ class ArchiveReader {
     return {...result,media:post.media.map(mid=>this.publicMedia(mid)).filter(m=>m.variant==='original')};
   }
   async resolve(mid) { const item=this.media.get(mid); if (!item) throw new Error('Unknown media'); return {...await safeFile(this.root,item.filename),mime:item.mime}; }
+  async resolvePost(key) {
+    const post=this.posts.find(p=>p.key===key);
+    if(!post?.textFilename) throw new Error('Post unavailable; refresh the index');
+    return {...await safeFile(this.root,post.textFilename),post};
+  }
 }
 module.exports = {ArchiveReader,safeFile,inside,dateFromBody};

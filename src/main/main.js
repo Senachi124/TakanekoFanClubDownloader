@@ -195,7 +195,7 @@ ipcMain.handle('capture-token', async () => {
 
 // Open exported folder
 ipcMain.handle('open-exported-folder', () => {
-  const exportedPath = path.join(app.getPath('userData'), 'exported');
+  const exportedPath = store.get('downloadRoot') || path.join(app.getPath('userData'), 'exported');
   const fs = require('fs');
 
   if (!fs.existsSync(exportedPath)) {
@@ -208,7 +208,7 @@ ipcMain.handle('open-exported-folder', () => {
 
 // Get exported folder path
 ipcMain.handle('get-exported-path', () => {
-  return path.join(app.getPath('userData'), 'exported');
+  return store.get('downloadRoot') || path.join(app.getPath('userData'), 'exported');
 });
 
 
