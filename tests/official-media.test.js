@@ -51,7 +51,7 @@ test('official gallery uses single Bearer, unique files, completion markers and 
 test('movie uses bundled executable without shell, shared slot and only completes after a valid video',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'takaneko-movie-'));
  const previous=global.fetch;let videoId='12345',calls=[],slots=0;
- global.fetch=async()=>Response.json({title:'movie',createdAt:1700000000000,videoId});
+ global.fetch=async()=>Response.json({title:'movie',createdAt:1700000000000,movieType:'video',videoId});
  const filename=path.resolve(__dirname,'../src/main/api/exportMovies.js'),localRequire=createRequire(filename),module={exports:{}};
  const spawn=(command,args,options)=>{
   calls.push({command,args,options});const child=new EventEmitter();child.stdout=new EventEmitter();child.stderr=new EventEmitter();
@@ -99,6 +99,12 @@ test('movies route YouTube/Vimeo, upgrade only known image hosts and preserve sa
   assert.ok(requests.includes('https://img.youtube.com/vi/AbC_dE-1234/maxresdefault.jpg'));
   assert.match(await fs.readFile(path.join(output,'index.md'),'utf8'),/\*\*YouTube ID\*\*/);
   assert.equal(movieSource({movieType:'vimeo',videoId:'12345/abcdef'}).url,'https://player.vimeo.com/video/12345?h=abcdef');
+  const officialVideo=movieSource({movieType:'video',videoId:'12345'});
+  assert.equal(officialVideo.type,'vimeo');
+  assert.equal(officialVideo.url,'https://player.vimeo.com/video/12345');
+  assert.equal(officialVideo.label,'Vimeo');
+  assert.equal(movieSource({movieType:'video',videoId:'12345/abcdef'}).url,'https://player.vimeo.com/video/12345?h=abcdef');
+  assert.throws(()=>movieSource({movieType:'video',videoId:'invalid;command'}),{code:'VIDEO_ID_INVALID'});
   assert.equal(movieSource({videoId:'12345'}).url,'https://player.vimeo.com/video/12345');
   assert.equal(movieThumbnail('http://i.ytimg.com/vi/fixture/default.jpg'),'https://i.ytimg.com/vi/fixture/default.jpg');
   for(const url of ['http://other.example/image.jpg','http://img.youtube.com.evil.test/image.jpg','http://user:secret@img.youtube.com/image.jpg','http://img.youtube.com:81/image.jpg'])assert.throws(()=>movieThumbnail(url),{code:'HTTPS_REQUIRED'});
