@@ -11,7 +11,9 @@ const youtubeCookies = require('../utils/youtubeCookies');
 const {failure, diagnostic} = require('../utils/downloadErrors');
 
 function movieSource(detail) {
-  const type=String(detail.movieType || 'vimeo').toLowerCase();
+  const rawType=String(detail.movieType || 'vimeo').toLowerCase();
+  // The official FC player uses movieType "video" for Vimeo embeds.
+  const type=rawType==='video'?'vimeo':rawType;
   const id=String(detail.videoId || '');
   if(!id) throw failure('VIDEO_ID_MISSING','Missing video ID');
   if(type==='youtube') {
