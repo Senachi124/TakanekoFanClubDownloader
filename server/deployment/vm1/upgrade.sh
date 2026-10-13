@@ -41,6 +41,7 @@ systemctl stop takaneko-auto.timer takaneko-nas.timer takaneko-web.service
 idle
 systemctl stop takaneko.service takaneko-backup.service
 runuser -u takanekowork -g takaneko-read -- env PYTHONDONTWRITEBYTECODE=1 python3 server/worker.py --initialize
+python3 server/deployment/vm1/harden-release.py "$release" --source-revision "$(basename "$release")"
 ln -sfn "$release" /opt/takaneko/current
 switched=1
 for unit in "${active[@]}"; do
