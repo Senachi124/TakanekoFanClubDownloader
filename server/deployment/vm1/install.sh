@@ -43,6 +43,8 @@ systemctl daemon-reload
 systemctl enable takaneko.service takaneko-web.service takaneko-https.service takaneko-backup.service takaneko-nas.timer takaneko-auto.timer takaneko-tls-reload.timer
 systemctl restart takaneko.service takaneko-web.service takaneko-https.service takaneko-backup.service
 systemctl start takaneko-nas.timer takaneko-auto.timer takaneko-tls-reload.timer
-ufw allow 2083/tcp comment 'Takaneko Fanclub HTTPS'
+ufw allow 443/tcp comment 'Shared HTTPS ingress'
+# Internal 127.0.0.1:42083 needs no public UFW rule; configure /takaneko/ on shared 443.
 python3 server/deployment/vm1/register_portal.py
 systemctl is-active takaneko.service takaneko-web.service takaneko-https.service
+

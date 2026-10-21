@@ -30,6 +30,9 @@ from vm1_backup import NAS
 
 PUBLIC = Path(__file__).with_name('public')
 ORIGIN = os.environ.get('TAKANEKO_ORIGIN', 'http://127.0.0.1:43130')
+BASE_PATH = os.environ.get('TAKANEKO_BASE_PATH', '')
+if BASE_PATH and not re.fullmatch(r'/[a-z0-9-]+', BASE_PATH):
+    raise ValueError('Invalid TAKANEKO_BASE_PATH')
 HOME_URL = os.environ.get('TAKANEKO_HOME_URL', '')
 SESSIONS = {}
 ATTEMPTS = defaultdict(list)
@@ -124,6 +127,8 @@ class Handler(BaseHTTPRequestHandler):
             mime = {'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'style.css': 'text/css; charset=utf-8'}[name]
             content = (PUBLIC.parents[1]/'src/shared/style.css' if name=='style.css' else PUBLIC/name).read_bytes()
             if name == 'index.html':
+                content = content.replace(b'href="/', b'href="' + BASE_PATH.encode() + b'/')
+                content = content.replace(b'src="/', b'src="' + BASE_PATH.encode() + b'/')
                 content = content.replace(b'__VERSION__',json.loads((PUBLIC.parents[1]/'package.json').read_text())['version'].encode())
                 content = content.replace(b'__HOME_URL__',html.escape(HOME_URL,quote=True).encode())
             return self.respond(200, content, mime=mime)
@@ -320,3 +325,4 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     ThreadingHTTPServer(('127.0.0.1', int(os.environ.get('TAKANEKO_PORT', '43130'))), Handler).serve_forever()
+

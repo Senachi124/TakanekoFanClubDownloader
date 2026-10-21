@@ -18,7 +18,8 @@ def services_domain(path=None):
 if __name__=='__main__':
     domain = services_domain()
     config = Path('/etc/takaneko')
-    (config/'runtime.env').write_text(f'TAKANEKO_ORIGIN=https://{domain}:2083\nTAKANEKO_HOME_URL=https://{domain}/\n')
+    (config/'runtime.env').write_text(f'TAKANEKO_ORIGIN=https://{domain}\nTAKANEKO_HOME_URL=https://{domain}/\nTAKANEKO_BASE_PATH=/takaneko\n')
     (config/'runtime.env').chmod(0o640)
     template = Path(__file__).with_name('nginx.conf').read_text()
     (config/'nginx.conf').write_text(template.replace('__SERVICES_DOMAIN__',domain))
+
