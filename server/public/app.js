@@ -1,9 +1,11 @@
+const basePath = new URL(document.currentScript.src).pathname.replace(/\/app\.js$/, "");
+const pagePath = location.pathname.slice(basePath.length) || "/";
 TakanekoUI.init();
 const $ = id => document.getElementById(id);
 let csrf = '', offset = 0, job = null, lastCount = -1, member = null, requestSerial = 0, mediaItems = [], mediaIndex = 0;
-const multimedia = location.pathname === '/library';
-const browsing = multimedia || location.pathname === '/browse';
-const backingUp = location.pathname === '/backup';
+const multimedia = pagePath === '/library';
+const browsing = multimedia || pagePath === '/browse';
+const backingUp = pagePath === '/backup';
 let activityOffset = 0, activitySerial = 0;
 $('downloadsPage').hidden = browsing || backingUp;
 $('backupPage').hidden = !backingUp;
@@ -20,7 +22,7 @@ function displayDate(value) {
   return new Date(value).toLocaleString('zh-HK', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 }
 async function api(path, data) {
-  const response = await fetch(path, data === undefined ? {} : {
+  const response = await fetch(basePath + path, data === undefined ? {} : {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: JSON.stringify(data)
   });
   const result = await response.json();
@@ -157,7 +159,7 @@ async function loadPosts() {
     const card = document.createElement('button'); card.className = 'post';
     const video = multimedia && post.mime.startsWith('video/');
     if (post.cover_id) {
-      const img = document.createElement('img'); img.src = `/media/${post.cover_id}`; img.loading = 'lazy'; img.alt = post.title; card.append(img);
+      const img = document.createElement('img'); img.src = `${basePath}/media/${post.cover_id}`; img.loading = 'lazy'; img.alt = post.title; card.append(img);
     } else { const mark = document.createElement('div'); mark.className = 'placeholder'; mark.textContent = video ? '▶' : multimedia ? '▧' : 'T'; card.append(mark); }
     const info = document.createElement('div'); info.className = 'post-info';
     const memberName = document.createElement('small'); memberName.textContent = multimedia ? `${post.member} · ${video ? '影片' : '圖片'}` : post.member;
@@ -181,7 +183,7 @@ async function openPost(key) {
   $('detailMedia').replaceChildren();
   for (const media of post.media.filter(m => m.variant === 'original')) {
     const element = document.createElement(media.mime.startsWith('video/') ? 'video' : 'img');
-    element.src = '/media/' + media.media_id;
+    element.src = basePath + '/media/' + media.media_id;
     if (element.tagName === 'VIDEO') { element.controls = true; element.preload = 'metadata'; }
     else { element.alt = post.title; element.loading = 'lazy'; }
     $('detailMedia').append(element);
@@ -193,7 +195,7 @@ function openMedia(index) {
   const media = mediaItems[index];
   $('mediaTitle').textContent = media.title; $('mediaMember').textContent = `${media.member} · ${displayDate(media.created_at)}`;
   const element = document.createElement(media.mime.startsWith('video/') ? 'video' : 'img');
-  element.src = '/media/' + media.media_id;
+  element.src = basePath + '/media/' + media.media_id;
   if (element.tagName === 'VIDEO') { element.controls = true; element.preload = 'metadata'; element.playsInline = true; }
   else element.alt = media.title;
   element.addEventListener('error', () => notice('媒體暫時無法讀取，請稍後重新開啟。'));
@@ -257,3 +259,4 @@ $('mediaNext').addEventListener('click', () => openMedia(mediaIndex + 1));
 $('mediaPost').addEventListener('click', action(async () => { const key = mediaItems[mediaIndex].resource_key; $('mediaDetail').close(); await openPost(key); }));
 refresh().catch(() => {});
 setInterval(() => { if (!$('workspace').hidden) refresh().catch(e => notice(e.message)); }, 4000);
+
