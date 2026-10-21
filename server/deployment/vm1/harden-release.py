@@ -27,7 +27,7 @@ def seal(root, source_revision):
             if stat.S_ISLNK(st.st_mode):continue
             if not(stat.S_ISREG(st.st_mode) or stat.S_ISDIR(st.st_mode)):
                 raise ValueError('Special file in deployment')
-            mode=stat.S_IMODE(st.st_mode)&~0o022
+            mode=stat.S_IMODE(st.st_mode)&0o777&~0o022
             if stat.S_ISREG(st.st_mode) and st.st_nlink>1:
                 expected=digest(p)
                 fd,temp=tempfile.mkstemp(prefix='.seal-',dir=p.parent);os.close(fd)

@@ -25,3 +25,8 @@ world-writable files, overwrite application DBs or remove media/NAS evidence.
 Virtualenvs must be independent of older release directories; record exact
 runtime packages separately and preserve the previous environment until a
 healthy controlled activation succeeds.
+
+Review correction (2026-10-21): sealing strips setuid/setgid/sticky bits as well
+as group/other write permission before publishing the manifest. Synthetic
+regression tests cover special permission bits, independent hardlink copies,
+untouched symlink targets and special-file rejection.
