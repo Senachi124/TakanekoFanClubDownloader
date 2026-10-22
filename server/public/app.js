@@ -33,6 +33,7 @@ async function api(path, data) {
 function notice(text) { $('notice').textContent = text; $('notice').hidden = false; }
 const youtubeSettings=mountYouTubeSettings($('settings'),data=>api('/api/youtube-cookies',data));
 function showLogin() {
+  $('authLoading').hidden = true;
   youtubeSettings.clear();
   requestSerial++; activitySerial++; lastCount = -1;
   $('activityList').replaceChildren();
@@ -43,8 +44,10 @@ function showLogin() {
 async function refresh() {
   const data = await api('/api/status');
   csrf = data.csrf;
-  if($('workspace').hidden) await youtubeSettings.refresh();
+  const enteringWorkspace = $('workspace').hidden;
+  $('authLoading').hidden = true;
   $('login').hidden = true; $('workspace').hidden = false; $('logout').hidden = false;
+  if (enteringWorkspace) await youtubeSettings.refresh();
   if (backingUp && !data.hasToken) $('settings').hidden = false;
   $('loginSettingsLink').hidden = data.hasToken;
   $('tokenState').textContent = data.hasToken ? '已匯入登入資料' : '尚未匯入登入資料';
@@ -147,7 +150,7 @@ async function loadPosts() {
     return tab;
   }));
   const memberQuery = member === null ? '' : '?member=' + encodeURIComponent(member);
-  $('browseLink').href = '/browse' + memberQuery; $('libraryLink').href = '/library' + memberQuery;
+  $('browseLink').href = basePath + '/browse' + memberQuery; $('libraryLink').href = basePath + '/library' + memberQuery;
   history.replaceState(null, '', location.pathname + memberQuery);
   $('collectionTitle').textContent = `${member || '全部成員'} · ${multimedia ? '多媒體庫' : '投稿'}`;
   $('browseCount').textContent = `${data.total.toLocaleString()} ${multimedia ? '個媒體' : '篇投稿'}`;
@@ -257,6 +260,22 @@ $('mediaDetail').addEventListener('close', () => $('mediaViewer').replaceChildre
 $('mediaPrevious').addEventListener('click', () => openMedia(mediaIndex - 1));
 $('mediaNext').addEventListener('click', () => openMedia(mediaIndex + 1));
 $('mediaPost').addEventListener('click', action(async () => { const key = mediaItems[mediaIndex].resource_key; $('mediaDetail').close(); await openPost(key); }));
-refresh().catch(() => {});
+async function loadSession() {
+  $('authLoading').hidden = false;
+  $('authLoading').setAttribute('aria-busy', 'true');
+  $('authStatus').textContent = '載入中…';
+  $('authRetry').hidden = true;
+  try { await refresh(); }
+  catch (error) {
+    if (!$('workspace').hidden) notice(error.message);
+    else if ($('login').hidden) {
+      $('authLoading').setAttribute('aria-busy', 'false');
+      $('authStatus').textContent = '暫時無法載入，請重試。';
+      $('authRetry').hidden = false;
+    }
+  }
+}
+$('authRetry').addEventListener('click', loadSession);
+loadSession();
 setInterval(() => { if (!$('workspace').hidden) refresh().catch(e => notice(e.message)); }, 4000);
 

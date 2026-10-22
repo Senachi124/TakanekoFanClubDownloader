@@ -4,7 +4,9 @@
 <body>
 <header><a class="brand" href="/">T<span>TAKANEKO<small>FANCLUB ARCHIVE</small></span></a><div class="header-right"><div role="tablist" aria-label="Language"><button class="quiet" role="tab" data-language="zh-Hant">繁體中文</button><button class="quiet" role="tab" data-language="ja">日本語</button></div><a id="homeLink" href="__HOME_URL__">返回首頁 ↗</a><button id="logout" class="quiet" hidden>登出</button></div></header>
 <main><p id="translationNotice" class="help" hidden>日本語は機械翻訳のため、不正確な表現が含まれる場合があります。</p>
-<section id="login" class="login panel"><p class="eyebrow">YOUR PRIVATE COLLECTION</p><h1>歡迎回來。</h1><p>登入你的 Takaneko 內容庫。</p><form id="loginForm"><label for="password">管理密碼</label><input id="password" type="password" autocomplete="current-password" required><button type="submit">登入工作區 <span>→</span></button></form><p id="loginError" class="error" role="alert"></p></section>
+<section id="authLoading" class="login panel" aria-busy="true"><p id="authStatus" role="status">載入中…</p><button id="authRetry" class="secondary" type="button" hidden>重試</button></section>
+<noscript><p class="panel">請啟用 JavaScript 以使用內容庫。</p></noscript>
+<section id="login" class="login panel" hidden><p class="eyebrow">YOUR PRIVATE COLLECTION</p><h1>歡迎回來。</h1><p>登入你的 Takaneko 內容庫。</p><form id="loginForm"><label for="password">管理密碼</label><input id="password" type="password" autocomplete="current-password" required><button type="submit">登入工作區 <span>→</span></button></form><p id="loginError" class="error" role="alert"></p></section>
 <div id="workspace" hidden>
 <nav class="page-nav" aria-label="工作區"><a href="/downloads" id="downloadsLink">抓取投稿</a><a href="/browse" id="browseLink">瀏覽內容</a><a href="/library" id="libraryLink">多媒體庫</a><a href="/backup" id="backupLink">NAS 與排程</a></nav>
 <div class="heading"><div><p class="eyebrow" id="pageEyebrow">TAKANEKO / BACKUP</p><h1 id="pageTitle">下載與備份<span class="accent">。</span></h1></div><button id="settingsToggle" class="secondary">登入與下載設定</button></div>
@@ -29,3 +31,4 @@
 <dialog id="detail"><div class="detail-header"><div><p id="detailMember" class="eyebrow"></p><h2 id="detailTitle" data-content></h2></div><button id="closeDetail" class="quiet" aria-label="關閉投稿">✕</button></div><div id="detailMedia" class="detail-media"></div><pre id="detailBody"></pre></dialog>
 <dialog id="mediaDetail" aria-labelledby="mediaTitle"><div class="detail-header"><div><p id="mediaMember" class="eyebrow"></p><h2 id="mediaTitle" data-content></h2></div><button id="closeMedia" class="quiet" aria-label="關閉媒體">✕</button></div><div id="mediaViewer" class="media-viewer"></div><div class="media-actions"><button id="mediaPrevious" class="quiet">← 上一個</button><button id="mediaPost" class="secondary">查看投稿</button><button id="mediaNext" class="quiet">下一個 →</button></div></dialog>
 </body></html>
+
