@@ -13,8 +13,9 @@ Refresh/check: `python3 .codex/service-memory.py --index-only` / `--status`.
 After relocating a checkout, run `python3 .codex/service-memory.py --configure`;
 review service-memory.json source, snapshot, cache and binary paths first.
 A fresh Codex chat must trust this project to load project configuration.
-Project trust is a separate explicit user decision. Automatic approval rejected
-bulk trust changes during this rollout; existing trusted contexts load normally.
+The user explicitly authorized the eight additional trusted VM1 roots on
+2026-10-26; native Codex configuration now loads in all 14 service contexts.
+Use the managed startup instructions in AGENTS.md for both integrations.
 If the shared binary is missing, install with:
 `python3 .codex/install-codebase-memory.py /home/linuxuser/codex-space/projects/server-admin/tools/codebase-memory-mcp/codebase-memory-mcp`.
 
