@@ -1,0 +1,20 @@
+{
+  "service": "takaneko",
+  "project": "vm1_takaneko",
+  "sources": {
+    "source": "/home/linuxuser/projects/takaneko",
+    "runtime_code": "/opt/takaneko/current",
+    "maintenance": "/home/linuxuser/codex-space/projects/server-admin"
+  },
+  "snapshot": "/home/linuxuser/codex-space/projects/server-admin/work/service-ai-tooling/snapshots/takaneko",
+  "cache": "/home/linuxuser/codex-space/projects/server-admin/work/service-ai-tooling/cache",
+  "binary": "/home/linuxuser/codex-space/projects/server-admin/tools/codebase-memory-mcp/codebase-memory-mcp",
+  "include_globs": {
+    "maintenance": [
+      "src/takaneko*/**",
+      "tests/takaneko*/**",
+      "scripts/*takaneko*.py",
+      "docs/*takaneko*.md"
+    ]
+  }
+}
