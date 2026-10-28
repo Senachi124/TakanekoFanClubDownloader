@@ -1,3 +1,4 @@
+from vm1_auth import verify as vm1_verify
 """Authenticated browser UI and read-only local/NAS media streaming."""
 import base64
 from collections import defaultdict
@@ -246,14 +247,14 @@ class Handler(BaseHTTPRequestHandler):
         config = json.loads(Path(os.environ.get('TAKANEKO_AUTH', '/etc/takaneko/auth.json')).read_text())
         password = str(data.get('password', '')).encode()
         derived = hashlib.scrypt(password, salt=bytes.fromhex(config['salt']), n=16384, r=8, p=1).hex()
-        if not hmac.compare_digest(derived, config['hash']): return self.respond(401, {'error': '管理密碼不正確。'})
+        if not (vm1_verify(data.get('username'), password.decode()) if data.get('username') else hmac.compare_digest(derived, config['hash'])): return self.respond(401, {'error': '管理密碼不正確。'})
         token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
         with LOCK:
             ATTEMPTS.pop(client, None)
             for old, value in list(SESSIONS.items()):
                 if value['expires'] < time.time(): SESSIONS.pop(old)
-            SESSIONS[token] = {'csrf': csrf, 'expires': time.time() + 43200}
-        self.respond(200, {'ok': True, 'csrf': csrf}, {'Set-Cookie': f'takaneko_session={token}; Path=/; Max-Age=43200; HttpOnly; Secure; SameSite=Strict'})
+            SESSIONS[token] = {'csrf': csrf, 'expires': time.time() + 259200}
+        self.respond(200, {'ok': True, 'csrf': csrf}, {'Set-Cookie': f'takaneko_session={token}; Path=/; Max-Age=259200; HttpOnly; Secure; SameSite=Strict'})
 
     def media(self, media_id):
         row = query("SELECT * FROM media WHERE media_id=%s AND owner_id='owner' AND permission='private'", (media_id,), one=True)
@@ -325,4 +326,3 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     ThreadingHTTPServer(('127.0.0.1', int(os.environ.get('TAKANEKO_PORT', '43130'))), Handler).serve_forever()
-

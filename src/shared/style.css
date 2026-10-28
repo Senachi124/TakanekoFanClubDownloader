@@ -14,3 +14,8 @@ header{height:auto;min-height:112px;gap:16px;flex-wrap:wrap;padding-top:18px;pad
 .download-errors{margin:16px 0;padding:14px;border:1px solid #e8ad7855;border-radius:8px;overflow-wrap:anywhere}.download-errors summary{cursor:pointer;color:#ffc88f}.download-errors li{margin:8px 0;font-size:13px}.download-errors code{font-size:12px}
 
 .youtube-settings{border-top:1px solid var(--border,#343442);margin-top:24px;padding-top:24px}.youtube-settings textarea{width:100%;box-sizing:border-box;font-family:monospace}.youtube-settings details{margin:16px 0}.youtube-guide{max-width:85ch}.youtube-guide a{display:inline-block;margin:4px 8px 4px 0}
+
+/* VM1 login visual system; scoped to the login panel. */
+#login .vm1-brand{display:flex;align-items:center;gap:10px;font:700 14px Arial,system-ui,sans-serif;color:#0f172a}#login .vm1-mark{display:grid;place-items:center;width:38px;height:38px;border-radius:6px;background:#0b1020;color:white;font-size:13px}#login .vm1-caption{margin:36px 0 8px;color:#006a73;font-size:12px;font-weight:700}#login h1{font-size:24px;line-height:1.3;color:#0f172a;margin:0 0 24px}#login label{display:block;color:#0f172a;font-size:13px;font-weight:700;margin:18px 0 7px}#login input{box-sizing:border-box;width:100%;height:46px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#0f172a;padding:0 12px}#login button[type=submit],#login #login-submit{width:100%;height:46px;margin:20px 0 0;background:#00ffff;color:#0b1020;border:0;border-radius:6px;font-weight:700}#login :focus-visible{outline:3px solid #006a73;outline-offset:3px}
+#login{background:#fff;border:1px solid #e2e8f0;border-radius:6px;max-width:420px;padding:32px;margin:48px auto;color:#0f172a}
+@media(max-width:500px){#login{padding:24px;margin:24px auto}}
