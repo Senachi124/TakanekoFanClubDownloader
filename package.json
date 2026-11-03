@@ -1,0 +1,87 @@
+{
+  "name": "takaneko-downloader",
+  "productName": "Takaneko Fanclub Downloader",
+  "version": "2.1.0",
+  "description": "Takaneko Fanclub Content Downloader",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac --x64 --arm64",
+    "build:win": "node scripts/prepare-windows-tools.js && electron-builder --win",
+    "test": "node scripts/test.js",
+    "test:desktop": "electron scripts/smoke-desktop.js",
+    "check:release": "node scripts/check-release.js"
+  },
+  "author": "Takaneko Fan",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {
+    "cheerio": "1.0.0-rc.12",
+    "electron-store": "^8.1.0"
+  },
+  "build": {
+    "appId": "com.takaneko.downloader",
+    "productName": "Takaneko Fanclub Downloader",
+    "directories": {
+      "output": "dist"
+    },
+    "publish": null,
+    "extraResources": [
+      {
+        "from": "resources/tools/windows",
+        "to": "tools/windows",
+        "filter": [
+          "yt-dlp.exe",
+          "ffmpeg.exe",
+          "ffprobe.exe",
+          "deno.exe",
+          "LICENSE*",
+          "NOTICE*"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "artifactName": "Takaneko-Fanclub-Downloader-${version}-macOS-${arch}.${ext}"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Takaneko-Fanclub-Downloader-${version}-Windows-${arch}-Setup.${ext}"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "README.md",
+      "LICENSE",
+      "!**/*.test.js"
+    ],
+    "portable": {
+      "artifactName": "Takaneko-Fanclub-Downloader-${version}-Windows-${arch}-Portable.${ext}"
+    }
+  }
+}
