@@ -62,7 +62,10 @@ filename in the same folder with `variant: "original"`.
 
 The `:v1` suffix in a post key is part of its identity, not the record schema
 version. Supported kinds are `post`, `blog`, `gallery`, and `movie`. A missing
-publication date is stored as `null`. A text-only post has an empty media list.
+publication date is stored as `null`. Downloads with missing or invalid source
+dates leave `**Date**` blank and use an `unknown-date` filename prefix instead of
+the download time. The Reader shows an unknown date and lists undated posts after
+dated posts. A text-only post has an empty media list.
 
 Legacy `record.json` v1, other v2 layouts, and external `catalog.json` or
 `.catalog/` indexes are unsupported. Catalogs are ignored; unsupported records

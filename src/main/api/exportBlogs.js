@@ -8,6 +8,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { getYtDlpConfig } = require('../utils/mediaTools');
 const { withVideoSlot } = require('../utils/videoQueue');
+const { undatedFilenamePrefix } = require('../utils/officialMedia');
 
 const POST_ID_FILENAME = '.post-id';
 
@@ -104,14 +105,15 @@ function performVideoDownload(vimeoId, destPath) {
   });
 }
 
-function formatDateForFilename(ms) {
-  const d = new Date(ms || Date.now());
+function formatDateForFilename(ms, sourceId) {
+  const d = new Date(ms);
+  if (!ms || !Number.isFinite(d.getTime())) return undatedFilenamePrefix(sourceId);
   const p = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
 function formatTimestamp(ms) {
-  if (!ms) return '';
+  if (!ms || !Number.isFinite(new Date(ms).getTime())) return '';
   return new Date(ms).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }).replace(/\//g, '-');
 }
 
@@ -216,8 +218,8 @@ async function handleBackupTopicsBlogs(token, rootPath, state, onProgress, selec
     }
 
     state?.onDetails?.();
-    const releaseTime = detail.displayDate || detail.createdAt || summary.displayDate || Date.now();
-    const releaseStr = formatDateForFilename(releaseTime);
+    const releaseTime = detail.displayDate || detail.createdAt || summary.displayDate;
+    const releaseStr = formatDateForFilename(releaseTime, articleId);
     const safeTitle = (detail.title || 'untitled').replace(/[/\\:*?"<>|]/g, '_');
     const postDir = path.join(senderDir, `${releaseStr}_${safeTitle}`);
 

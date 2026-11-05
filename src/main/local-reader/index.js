@@ -16,7 +16,7 @@ async function safeFile(root, filename) {
   return {file: real, stat};
 }
 function dateFromBody(body) {
-  const raw = body.match(/\*\*Date\*\*:\s*([^\n]+)/)?.[1]?.trim();
+  const raw = body.match(/^\*\*Date\*\*:[ \t]*([^\r\n]*)/m)?.[1]?.trim();
   if (!raw) return null;
   const normalized = raw.replace(/\//g, '-').replace(/^(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{1,2}):(\d{1,2})/,(_m,y,mo,d,h,mi,s)=>`${y}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}T${h.padStart(2,'0')}:${mi.padStart(2,'0')}:${s.padStart(2,'0')}`);
   const ms = Date.parse(/[zZ]|[+-]\d\d:\d\d$/.test(normalized) ? normalized : normalized + '+09:00');

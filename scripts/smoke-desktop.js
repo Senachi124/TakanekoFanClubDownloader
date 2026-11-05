@@ -64,11 +64,13 @@ app.whenReady().then(async()=>{
     assert.equal(new Store().get('readerRoot'),root);
     await execute('document.querySelector("[data-view=browse]").click()');await until('document.querySelectorAll("#posts .post").length === 1 && document.getElementById("scanProgress").hidden');
     assert.equal(await execute('document.getElementById("modeLabel").hidden'),true);
+    assert.ok((await execute('document.querySelector("#posts .post small").textContent')).includes('投稿發布時間（JST / UTC+9）：2024-01-02 12:00:00'));
     await execute('document.querySelector("[data-view=media]").click()');await until('document.querySelectorAll("#posts .post").length === 2');
     await capture('multimedia-zh.png');
     await execute('document.getElementById("mode").value="image";document.getElementById("mode").dispatchEvent(new Event("change"))');
     await until('document.querySelectorAll("#posts .post").length === 1 && document.getElementById("scanProgress").hidden');
     await execute('document.querySelector("#posts .post").click()');await until('document.getElementById("detail").open');
+    assert.equal(await execute('document.getElementById("detailPublishedAt").textContent'),'投稿發布時間（JST / UTC+9）：2024-01-02 12:00:00');
     saveChoice=path.join(destination,'saved.png');
     await execute('document.querySelector("#detailMedia .actions button").click()');await until('document.getElementById("actionStatus").textContent === "已另存"');
     assert.deepEqual(fs.readFileSync(saveChoice),fs.readFileSync(path.join(post,'image.png')));
@@ -82,6 +84,7 @@ app.whenReady().then(async()=>{
     assert.equal(revealed.at(-1),fs.realpathSync(path.join(post,'index.md')));
     await execute('document.querySelector("[data-language=ja]").click()');await new Promise(r=>setTimeout(r,100));
     assert.equal(await execute('document.getElementById("savePost").textContent'),'投稿全体を別の場所に保存');
+    assert.equal(await execute('document.getElementById("detailPublishedAt").textContent'),'投稿の公開日時（JST / UTC+9）：2024-01-02 12:00:00');
     await capture('multimedia-ja.png');
     await execute('document.getElementById("close").click();document.querySelector("[data-language=zh-Hant]").click()');await new Promise(r=>setTimeout(r,100));
     await execute('document.getElementById("mode").value="video";document.getElementById("mode").dispatchEvent(new Event("change"))');await until('document.querySelectorAll("#posts .post").length === 1 && document.getElementById("scanProgress").hidden');
@@ -98,12 +101,13 @@ app.whenReady().then(async()=>{
     assert.equal(await execute('document.getElementById("scanStatus").textContent'),'');
     await execute('document.querySelector("#posts .post").click()');await new Promise(r=>setTimeout(r,200));
     assert.equal(await execute('document.getElementById("detail").open'),true);
+    assert.equal(await execute('document.getElementById("detailPublishedAt").textContent'),'投稿發布時間（JST / UTC+9）：2024-01-02 12:00:00');
     assert.ok((await execute('document.getElementById("detailBody").textContent')).includes('Safe <script>bad()</script>'));
     const mediaUrl=await execute('document.querySelector("#detailMedia video").src');
     const response=await net.fetch(mediaUrl,{headers:{Range:'bytes=2-6'}});assert.equal(response.status,206);assert.equal(await response.text(),'xture');
     await capture('reader.png');
     assert.equal(errors.filter(e=>!e.includes('video')).length,0,errors.join('\n'));
-    fs.writeFileSync(path.join(output,'result.json'),JSON.stringify({ok:true,checks:['preload isolation','three progress bars','language switching','reader indexing','post detail','media Range','settings folder persistence','Downloader export browsing','image/video filters','save original','export post','reveal indexed files','save cancellation']}));
+    fs.writeFileSync(path.join(output,'result.json'),JSON.stringify({ok:true,checks:['preload isolation','three progress bars','language switching','JST publication timestamps','reader indexing','post detail','media Range','settings folder persistence','Downloader export browsing','image/video filters','save original','export post','reveal indexed files','save cancellation']}));
     clearTimeout(timeout);console.log('Desktop smoke test passed.');app.exit(0);
   }catch(error){console.error(error.stack,errors);fs.writeFileSync(path.join(output,'result.json'),JSON.stringify({ok:false,error:error.stack,errors}));app.exit(1);}
 });

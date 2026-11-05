@@ -50,8 +50,8 @@ test('official gallery uses single Bearer, unique files, completion markers and 
 
 test('movie uses bundled executable without shell, shared slot and only completes after a valid video',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'takaneko-movie-'));
- const previous=global.fetch;let videoId='12345',calls=[],slots=0;
- global.fetch=async()=>Response.json({title:'movie',createdAt:1700000000000,movieType:'video',videoId});
+ const previous=global.fetch;let videoId='12345',createdAt=1700000000000,calls=[],slots=0;
+ global.fetch=async()=>Response.json({title:'movie',createdAt,movieType:'video',videoId});
  const filename=path.resolve(__dirname,'../src/main/api/exportMovies.js'),localRequire=createRequire(filename),module={exports:{}};
  const spawn=(command,args,options)=>{
   calls.push({command,args,options});const child=new EventEmitter();child.stdout=new EventEmitter();child.stderr=new EventEmitter();
@@ -66,6 +66,12 @@ test('movie uses bundled executable without shell, shared slot and only complete
   assert.equal(await fs.readFile(path.join(folder,'.post-id'),'utf8'),'movie-1');
   videoId='';await assert.rejects(module.exports.handleBackupMovies('fixture',root,{},null,{id:'movie-2'}),/Missing video ID/);
   assert.equal(calls.length,1);
+  videoId='12345';createdAt=undefined;
+  const undated=await module.exports.handleBackupMovies('fixture',root,{},null,{id:'undated-movie'});
+  assert.ok(path.basename(undated).startsWith('unknown-date_'));
+  const body=await fs.readFile(path.join(undated,'index.md'),'utf8');
+  assert.match(body,/^\*\*Date\*\*: *$/m);
+  assert.equal(require('../src/main/local-reader').dateFromBody(body),null);
  } finally {global.fetch=previous;await fs.rm(root,{recursive:true,force:true});}
 });
 

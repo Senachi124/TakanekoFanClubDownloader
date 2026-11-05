@@ -6,6 +6,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { getYtDlpConfig } = require('../utils/mediaTools');
 const { withVideoSlot } = require('../utils/videoQueue');
+const { undatedFilenamePrefix } = require('../utils/officialMedia');
 
 const { DEFAULT_CONCURRENCY, normalizeConcurrency } = require('../utils/concurrency');
 const POST_ID_FILENAME = '.post-id';
@@ -56,12 +57,13 @@ async function checkState(state) {
 }
 
 function formatTimestamp(ms) {
-  if (!ms) return '';
+  if (!ms || !Number.isFinite(new Date(ms).getTime())) return '';
   return new Date(ms).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }).replace(/\//g, '-');
 }
 
-function formatDateForFilename(ms) {
-  const d = new Date(ms || Date.now());
+function formatDateForFilename(ms, sourceId) {
+  const d = new Date(ms);
+  if (!ms || !Number.isFinite(d.getTime())) return undatedFilenamePrefix(sourceId);
   const p = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
@@ -219,8 +221,8 @@ async function processSinglePost(data, rootPath, strict = false) {
   const senderDir = path.join(rootPath, senderName);
   const picturesDir = path.join(senderDir, 'pictures');
 
-  const releaseTime = data.releaseDate || data.displayDate || data.publishedAt || data.createdAt || data.sentAt || Date.now();
-  const releaseStr = formatDateForFilename(releaseTime);
+  const releaseTime = data.releaseDate || data.displayDate || data.publishedAt || data.createdAt || data.sentAt;
+  const releaseStr = formatDateForFilename(releaseTime, data.notificationReservationId);
   const title = String(rawTitle).replace(/[/\\:*?"<>|]/g, '_').trim();
   const postDir = path.join(senderDir, `${releaseStr}_${title}`);
 
