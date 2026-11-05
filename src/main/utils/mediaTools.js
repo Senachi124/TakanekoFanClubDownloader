@@ -10,21 +10,39 @@ function getWindowsToolsDir() {
     : path.join(__dirname, '../../../resources/tools/windows');
 }
 
+function getBundledToolsDir() {
+  if (process.platform === 'win32') return getWindowsToolsDir();
+  if (process.platform !== 'darwin') return null;
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'tools', 'macos')
+    : path.join(__dirname, '../../../resources/tools/macos', process.arch);
+}
+
 function getYtDlpConfig() {
-  const toolsDir = getWindowsToolsDir();
+  const toolsDir = getBundledToolsDir();
   if (!toolsDir) {
     return { command: 'yt-dlp', ffmpegLocation: null,
       youtubeArgs:['--js-runtimes','node','--remote-components','ejs:github'] };
   }
 
-  const command = path.join(toolsDir, 'yt-dlp.exe');
-  const ffmpeg = path.join(toolsDir, 'ffmpeg.exe');
-  const ffprobe = path.join(toolsDir, 'ffprobe.exe');
-  const deno = path.join(toolsDir, 'deno.exe');
+  const extension = process.platform === 'win32' ? '.exe' : '';
+  const command = path.join(toolsDir, 'yt-dlp' + extension);
+  const ffmpeg = path.join(toolsDir, 'ffmpeg' + extension);
+  const ffprobe = path.join(toolsDir, 'ffprobe' + extension);
+  const deno = path.join(toolsDir, 'deno' + extension);
+  const usable = file => {
+    try {
+      if (!fs.statSync(file).isFile()) return false;
+      fs.accessSync(file, process.platform === 'darwin' ? fs.constants.X_OK : fs.constants.R_OK);
+      return true;
+    } catch { return false; }
+  };
 
-  if (![command, ffmpeg, ffprobe, deno].every(file => fs.existsSync(file))) {
+  if (![command, ffmpeg, ffprobe, deno].every(usable)) {
     if (!app.isPackaged) return { command: 'yt-dlp', ffmpegLocation: null, youtubeArgs:['--js-runtimes','node','--remote-components','ejs:github'] };
-    throw new Error('Windows media tools are missing from this installation. Please reinstall the latest version.');
+    const error = new Error(`${process.platform === 'darwin' ? 'macOS' : 'Windows'} media tools are missing or not executable. Please reinstall the latest version.`);
+    error.code = 'MEDIA_TOOL_NOT_FOUND';
+    throw error;
   }
 
   return { command, ffmpegLocation: toolsDir, youtubeArgs:['--js-runtimes',`deno:${deno}`] };

@@ -1,13 +1,13 @@
 {
   "name": "takaneko-downloader",
   "productName": "Takaneko Fanclub Downloader",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Takaneko Fanclub Content Downloader",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
-    "build:mac": "electron-builder --mac --x64 --arm64",
+    "build:mac": "node scripts/build-macos.js",
     "build:win": "node scripts/prepare-windows-tools.js && electron-builder --win",
     "test": "node scripts/test.js",
     "test:desktop": "electron scripts/smoke-desktop.js",
@@ -30,27 +30,34 @@
       "output": "dist"
     },
     "publish": null,
-    "extraResources": [
-      {
-        "from": "resources/tools/windows",
-        "to": "tools/windows",
-        "filter": [
-          "yt-dlp.exe",
-          "ffmpeg.exe",
-          "ffprobe.exe",
-          "deno.exe",
-          "LICENSE*",
-          "NOTICE*"
-        ]
-      }
-    ],
     "mac": {
       "category": "public.app-category.utilities",
       "target": [
         "dmg",
         "zip"
       ],
-      "artifactName": "Takaneko-Fanclub-Downloader-${version}-macOS-${arch}.${ext}"
+      "artifactName": "Takaneko-Fanclub-Downloader-${version}-macOS-${arch}.${ext}",
+      "extraResources": [
+        {
+          "from": "resources/tools/macos/${arch}",
+          "to": "tools/macos",
+          "filter": [
+            "yt-dlp",
+            "ffmpeg",
+            "ffprobe",
+            "deno",
+            "LICENSE*",
+            "NOTICE*"
+          ]
+        }
+      ],
+      "minimumSystemVersion": "12.0",
+      "binaries": [
+        "Contents/Resources/tools/macos/yt-dlp",
+        "Contents/Resources/tools/macos/ffmpeg",
+        "Contents/Resources/tools/macos/ffprobe",
+        "Contents/Resources/tools/macos/deno"
+      ]
     },
     "win": {
       "target": [
@@ -64,6 +71,20 @@
           "target": "portable",
           "arch": [
             "x64"
+          ]
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "resources/tools/windows",
+          "to": "tools/windows",
+          "filter": [
+            "yt-dlp.exe",
+            "ffmpeg.exe",
+            "ffprobe.exe",
+            "deno.exe",
+            "LICENSE*",
+            "NOTICE*"
           ]
         }
       ]

@@ -1,4 +1,4 @@
-# Takaneko Fanclub Downloader v2.1.0
+# Takaneko Fanclub Downloader v2.1.1
 
 **繁體中文** | [日本語](README.ja.md)
 
@@ -36,16 +36,16 @@
 
 ## 安裝
 
-目前原始碼版本為 v2.1.0。已發布的安裝包請見 [Releases](https://github.com/Senachi124/TakanekoFanClubDownloader/releases)；以下列出本版本的建置檔名，不代表安裝包已發布。使用安裝包不需另外安裝 Node.js。
+目前原始碼版本為 v2.1.1。已發布的安裝包請見 [Releases](https://github.com/Senachi124/TakanekoFanClubDownloader/releases)；以下列出本版本的建置檔名，不代表安裝包已發布。使用安裝包不需另外安裝 Node.js。
 
 | 平台 | 檔案 |
 |---|---|
-| Windows x64 安裝版 | `Takaneko-Fanclub-Downloader-2.1.0-Windows-x64-Setup.exe` |
-| Windows x64 免安裝版 | `Takaneko-Fanclub-Downloader-2.1.0-Windows-x64-Portable.exe` |
-| macOS Intel | `Takaneko-Fanclub-Downloader-2.1.0-macOS-x64.dmg` / `.zip` |
-| macOS Apple Silicon | `Takaneko-Fanclub-Downloader-2.1.0-macOS-arm64.dmg` / `.zip` |
+| Windows x64 安裝版 | `Takaneko-Fanclub-Downloader-2.1.1-Windows-x64-Setup.exe` |
+| Windows x64 免安裝版 | `Takaneko-Fanclub-Downloader-2.1.1-Windows-x64-Portable.exe` |
+| macOS Intel | `Takaneko-Fanclub-Downloader-2.1.1-macOS-x64.dmg` / `.zip` |
+| macOS Apple Silicon | `Takaneko-Fanclub-Downloader-2.1.1-macOS-arm64.dmg` / `.zip` |
 
-Windows 內附 yt-dlp、ffmpeg、ffprobe 及 Deno。macOS 影片下載需要在 PATH 提供最新版 yt-dlp、ffmpeg／ffprobe，及 Deno 2.3+ 或 Node.js 22+；圖片及 Reader 不需要。Release 附 SHA-256 校驗值；安裝包不含私人帳戶及 archive。
+Windows 與 macOS 安裝包均內附 yt-dlp、ffmpeg、ffprobe 及 Deno，影片下載不需額外安裝 Homebrew、Python、Node.js 或設定 PATH。macOS 需要 **macOS 12 Monterey 或更新版本**；請依電腦處理器選擇 Intel（x64）或 Apple Silicon（arm64）版本。Release 附 SHA-256 校驗值；安裝包不含私人帳戶及 archive。
 
 v2 保留 1.2.1 以後的 app ID、名稱及使用者資料位置。1.2.0 以前使用舊名稱 `Takaneko Downloader`，請保留舊資料再自行遷移。
 
@@ -102,9 +102,18 @@ npm run test:desktop
 ```sh
 # Windows
 npm run build:win
-# macOS
+# macOS：產生 Intel 與 Apple Silicon 兩個版本
 npm run build:mac
+# 或只建置目前需要的架構
+npm run build:mac -- --x64
+npm run build:mac -- --arm64
 ```
+
+macOS 建置會自動下載固定版本的工具，核對 SHA-256，並將對應架構的執行檔與授權文件放入 `.app/Contents/Resources/tools/macos/`。FFmpeg／FFprobe 採用 [serversideup 的 LGPL 靜態建置](https://github.com/serversideup/ffmpeg-lgpl-builds)，支援程式使用的 VideoToolbox 與 AAC。工具版本、來源及校驗值集中在 [`scripts/macos-tool-assets.js`](scripts/macos-tool-assets.js)；升級時須一起更新並重新驗證兩種架構。
+
+直接以 `npm start` 開發時，可先執行 `node scripts/prepare-macos-tools.js arm64`（Intel 改為 `x64`），使用相同工具。未準備工具的開發環境仍會使用 PATH 上的 yt-dlp、ffmpeg／ffprobe 與 Node.js；正式安裝包若工具缺少或不能執行，則提示重新安裝。
+
+CI 分別在 Intel 與 Apple Silicon Mac 建置，檢查工具架構、最低系統版本及外部函式庫依賴，並在僅含系統工具的 PATH 下測試 JavaScript 執行、影片編碼與媒體探測。`node scripts/check-release.js --packages` 會再次驗證已打包的工具；跨架構檢查僅驗證檔案結構，實際執行需在對應架構的 Mac 完成。
 
 本 repo 專注本地 Electron 桌面程式，不包含伺服器、遠端備份或部署工具。UI 在 `src/renderer/`，共用介面元件在 `src/shared/`，桌面主程序與下載核心在 `src/main/`，本地 Reader 在 `src/main/local-reader/`。測試在 `test/`、`tests/`，打包與桌面驗證工具在 `scripts/`。
 

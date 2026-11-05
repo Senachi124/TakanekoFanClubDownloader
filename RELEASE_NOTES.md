@@ -1,16 +1,25 @@
 # Release Notes
 
-## v2.1.0
+## v2.1.1
 
-Initial public source baseline for the local Electron desktop application.
+Self-contained macOS packages, clearer publication times, and a focused local Reader.
 
-- Download Fanclub posts, blogs, galleries, and movies to a chosen local folder.
-- Browse posts, images, and videos exported by this Downloader or saved with
-  its Save Post action. Legacy v1 records and external catalogs are not supported.
-- Copy individual media or complete posts without modifying the source archive.
-- Store login information and preferences locally, with Traditional Chinese and
-  Japanese UI support.
-- Keep application code in `src/`, with desktop tests and packaging checks.
+- Bundle yt-dlp, FFmpeg, FFprobe and Deno in both Intel and Apple Silicon
+  macOS packages, matching the self-contained Windows setup. No Homebrew,
+  Python or PATH configuration is required. macOS 12 or later is required.
+- Verify pinned tool downloads and validate packaged tools on native Intel
+  and Apple Silicon CI runners.
+- Label publication times as JST / UTC+9 throughout the Reader, using Japan
+  time regardless of the computer's timezone or interface language.
+- Leave missing or invalid source dates blank instead of substituting the
+  download time. Show unknown dates in the Reader and use `unknown-date` in
+  filenames; previously saved dates are not rewritten.
+- Keep folder selection while limiting the Reader to current Downloader
+  exports and v2 records created by Save Post. Remove legacy v1 records,
+  external catalogs and persistent offline indexes. Existing archive files
+  remain unchanged, but unsupported formats no longer appear in the Reader.
+- Split the README into Traditional Chinese and Japanese with language links,
+  move Quick Start earlier, and add FaveConnect development guidance.
 
 See [README.md](README.md) for local setup and development commands.
 

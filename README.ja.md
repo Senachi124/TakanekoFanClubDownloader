@@ -1,4 +1,4 @@
-# Takaneko Fanclub Downloader v2.1.0
+# Takaneko Fanclub Downloader v2.1.1
 
 [繁體中文](README.md) | **日本語**
 
@@ -38,16 +38,16 @@ Takaneko Fanclub（高嶺のなでしこオフィシャルファンクラブ）�
 
 ## インストール
 
-ソースコードのバージョンは v2.1.0 です。公開済みのパッケージは [Releases](https://github.com/Senachi124/TakanekoFanClubDownloader/releases) を確認してください。以下は本バージョンの出力ファイル名であり、公開済みとは限りません。パッケージの利用に Node.js の別途インストールは不要です。
+ソースコードのバージョンは v2.1.1 です。公開済みのパッケージは [Releases](https://github.com/Senachi124/TakanekoFanClubDownloader/releases) を確認してください。以下は本バージョンの出力ファイル名であり、公開済みとは限りません。パッケージの利用に Node.js の別途インストールは不要です。
 
 | OS | ファイル |
 |---|---|
-| Windows x64 インストーラー | `Takaneko-Fanclub-Downloader-2.1.0-Windows-x64-Setup.exe` |
-| Windows x64 ポータブル | `Takaneko-Fanclub-Downloader-2.1.0-Windows-x64-Portable.exe` |
-| macOS Intel | `Takaneko-Fanclub-Downloader-2.1.0-macOS-x64.dmg` / `.zip` |
-| macOS Apple Silicon | `Takaneko-Fanclub-Downloader-2.1.0-macOS-arm64.dmg` / `.zip` |
+| Windows x64 インストーラー | `Takaneko-Fanclub-Downloader-2.1.1-Windows-x64-Setup.exe` |
+| Windows x64 ポータブル | `Takaneko-Fanclub-Downloader-2.1.1-Windows-x64-Portable.exe` |
+| macOS Intel | `Takaneko-Fanclub-Downloader-2.1.1-macOS-x64.dmg` / `.zip` |
+| macOS Apple Silicon | `Takaneko-Fanclub-Downloader-2.1.1-macOS-arm64.dmg` / `.zip` |
 
-Windows 版は yt-dlp、ffmpeg、ffprobe、Deno を同梱します。macOS での動画ダウンロードには、PATH 上の最新版 yt-dlp・ffmpeg・ffprobe と、Deno 2.3+ または Node.js 22+ が必要です。画像と Reader の利用には不要です。Release には SHA-256 チェックサムが付属し、個人のアカウント情報やアーカイブは同梱しません。
+Windows 版と macOS 版は、どちらも yt-dlp、ffmpeg、ffprobe、Deno を同梱します。動画のダウンロードに Homebrew、Python、Node.js の追加インストールや PATH の設定は不要です。macOS 版は **macOS 12 Monterey 以降**が必要です。CPU に合わせて Intel（x64）版または Apple Silicon（arm64）版を選んでください。Release には SHA-256 チェックサムが付属し、個人のアカウント情報やアーカイブは同梱しません。
 
 v2 は 1.2.1 以降のアプリ ID・名前・ユーザーデータの保存場所を維持します。1.2.0 以前は旧名 `Takaneko Downloader` を使用しているため、元データを保持して必要な移行を行ってください。
 
@@ -104,9 +104,18 @@ npm run test:desktop
 ```sh
 # Windows
 npm run build:win
-# macOS
+# macOS：Intel 版と Apple Silicon 版を作成
 npm run build:mac
+# 必要なアーキテクチャだけをビルドする場合
+npm run build:mac -- --x64
+npm run build:mac -- --arm64
 ```
+
+macOS のビルド時に固定バージョンのツールをダウンロードし、SHA-256 を照合して、対象アーキテクチャの実行ファイルとライセンスを `.app/Contents/Resources/tools/macos/` に同梱します。FFmpeg／FFprobe は [serversideup の LGPL 静的ビルド](https://github.com/serversideup/ffmpeg-lgpl-builds)を使用し、本アプリで使用する VideoToolbox と AAC に対応します。バージョン、配布元、チェックサムは [`scripts/macos-tool-assets.js`](scripts/macos-tool-assets.js) で管理します。更新時はまとめて変更し、両アーキテクチャを再検証してください。
+
+`npm start` で開発する場合は、先に `node scripts/prepare-macos-tools.js arm64`（Intel は `x64`）を実行すると同じツールを使用できます。ツールを準備していない開発環境では、PATH 上の yt-dlp、ffmpeg／ffprobe、Node.js を使用します。配布版で同梱ツールが欠落しているか実行できない場合は、再インストールを案内します。
+
+CI は Intel と Apple Silicon の Mac で個別にビルドし、ツールのアーキテクチャ、最低 OS バージョン、外部ライブラリへの依存を検証します。システム標準の PATH のみで JavaScript 実行、動画エンコード、メディア情報の取得も確認します。`node scripts/check-release.js --packages` はパッケージ内のツールを再検証します。異なるアーキテクチャの検証はファイル構造のみで、実行テストには対応する Mac が必要です。
 
 このリポジトリはローカル Electron デスクトップアプリ専用です。サーバー・リモートバックアップ・デプロイツールは含みません。UI は `src/renderer/`、共通 UI は `src/shared/`、メインプロセスとダウンロード処理は `src/main/`、Reader は `src/main/local-reader/` にあります。テストは `test/`・`tests/`、パッケージとデスクトップ検証用のツールは `scripts/` にあります。
 
