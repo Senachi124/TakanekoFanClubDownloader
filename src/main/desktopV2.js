@@ -7,8 +7,7 @@ const {downloadJob} = require('./downloadJob');
 const {normalizeConcurrency} = require('./utils/concurrency');
 const {saveMedia,savePost}=require('./archiveActions');
 function setup({store,state,getWindow}) {
-  const cache=path.join(app.getPath('userData'),'reader-index');
-  const readers = {local:new ArchiveReader(cache),reader:new ArchiveReader(cache)};
+  const readers = {local:new ArchiveReader(),reader:new ArchiveReader()};
   const ready = {};
   const exported=()=>store.get('downloadRoot') || path.join(app.getPath('userData'),'exported');
   let running=false;
@@ -88,7 +87,7 @@ function setup({store,state,getWindow}) {
     running=true;state.isPaused=false;state.isCancelled=false;let errorsSaved=-1;
     try {
       const directory=exported();
-      const result=await downloadJob({token,directory,cacheDirectory:cache,settings:{blogs:true,gallery:true,movies:true,...store.get('v2Settings',{}),concurrency:store.get('downloadConcurrency',5)},state,emit:p=>{
+      const result=await downloadJob({token,directory,settings:{blogs:true,gallery:true,movies:true,...store.get('v2Settings',{}),concurrency:store.get('downloadConcurrency',5)},state,emit:p=>{
         if(errorsSaved!==(p.errors || []).length){store.set('downloadErrors',p.errors || []);errorsSaved=(p.errors || []).length;}
         if(!getWindow().isDestroyed())getWindow().webContents.send('job-progress',p);
       }});

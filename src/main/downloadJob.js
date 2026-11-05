@@ -3,7 +3,7 @@ const {normalizeConcurrency} = require('./utils/concurrency');
 const {ArchiveReader} = require('./local-reader');
 const {diagnostics} = require('./utils/downloadErrors');
 function initialProgress() { return {list:{done:0,total:null,failed:0,skipped:0,state:'running'},details:{done:0,total:null,failed:0,skipped:0,state:'waiting'},files:{done:0,total:null,failed:0,skipped:0,state:'waiting'}}; }
-async function downloadJob({token,directory,cacheDirectory,settings,state,emit,engine=run}) {
+async function downloadJob({token,directory,settings,state,emit,engine=run}) {
   const progress = initialProgress();
   progress.errors=[];
   const publish = () => emit(JSON.parse(JSON.stringify(progress)));
@@ -13,7 +13,7 @@ async function downloadJob({token,directory,cacheDirectory,settings,state,emit,e
     progress.list={done:items.length,total:items.length,failed:0,skipped:0,state:'completed'};
     progress.details.total=progress.files.total=items.length;
     progress.details.state=progress.files.state='running'; publish();
-    const reader = new ArchiveReader(cacheDirectory); await reader.select(directory);
+    const reader = new ArchiveReader(); await reader.select(directory);
     const existing = new Set(reader.posts.map(p=>`${p.kind}:${p.sourceId}`));
     let cursor=0;
     const wait = async () => { while (state.isPaused && !state.isCancelled) await new Promise(r=>setTimeout(r,200)); return !state.isCancelled; };

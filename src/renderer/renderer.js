@@ -2,8 +2,8 @@ const $=id=>document.getElementById(id), api=window.takaneko.invoke, UI=window.T
 Object.assign(UI.translations,{
   '多媒體瀏覽':'メディア閲覧','資料夾設定':'フォルダー設定','下載位置':'保存先','選擇下載位置':'保存先を選択','瀏覽來源':'閲覧元','選擇瀏覽來源':'閲覧元を選択',
   '新下載存於此處；原有檔案不會搬移。另存檔案時可再選位置。':'新しいダウンロードの保存先です。既存ファイルは移動しません。別名保存時に保存先を変更できます。',
-  '內容瀏覽、多媒體瀏覽及本地閱讀器共用此來源。選擇本機或已掛載 NAS 的 archive 資料夾。':'コンテンツ・メディア・ローカルリーダーで共通の閲覧元です。ローカルまたはマウント済み NAS の archive フォルダーを選択します。',
-  '瀏覽設定中選定的本機或 NAS archive；可另存原檔。':'設定で選択したローカルまたは NAS の archive を閲覧し、元ファイルを別の場所に保存できます。',
+  '內容瀏覽、多媒體瀏覽及本地閱讀器共用此來源。僅讀取本程式下載或另存的投稿資料夾。':'コンテンツ・メディア・ローカルリーダーで共通の閲覧元です。このアプリでダウンロードまたは保存した投稿フォルダーのみ読み込めます。',
+  '僅瀏覽本程式下載或另存的投稿；可另存原檔。':'このアプリでダウンロードまたは保存した投稿のみ閲覧できます。元ファイルを別の場所に保存できます。',
   '另存整篇投稿':'投稿全体を別の場所に保存','開啟投稿資料夾':'投稿フォルダーを開く','下載原檔':'元ファイルを保存','開啟原檔資料夾':'元ファイルのフォルダーを開く',
   '請選擇來源資料夾以外的位置':'閲覧元フォルダーの外を選択してください','下載中，請完成或停止後更改位置':'ダウンロードの完了または停止後に保存先を変更してください',
   '未能讀取或保存檔案，請確認來源與目的地可用':'ファイルを読み取り・保存できません。閲覧元と保存先を確認してください','已另存':'保存しました','已開啟資料夾':'フォルダーを開きました'
@@ -23,7 +23,7 @@ async function load(scan=false){
   if(scan)await api('reader-scan',mode);
   const result=await api('reader-query',mode,{member:$('member').value,kind:$('kind').value,type:$('mode').value,multimedia:$('mode').value!=='posts',offset});
   if(request!==serial)return;
-  rows=result.rows;$('root').textContent=result.root;$('scanStatus').textContent=result.offline?'離線：顯示先前索引':result.warnings?'部分內容無法讀取':result.source==='catalog'?'已載入共用索引':'';
+  rows=result.rows;$('root').textContent=result.root;$('scanStatus').textContent=result.unavailable?'無法讀取資料夾':result.warnings?'部分內容無法讀取或格式不支援':'';
   const selected=$('member').value;$('member').replaceChildren(new Option('全部成員',''),...result.members.map(m=>new Option(m,m)));$('member').value=selected;
   $('posts').replaceChildren();$('empty').hidden=rows.length>0;
   rows.forEach((row,index)=>{

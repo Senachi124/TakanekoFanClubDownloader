@@ -8,10 +8,6 @@ const root=path.join(output,'archive'),post=path.join(root,'成員','投稿');fs
 fs.writeFileSync(path.join(post,'.post-id'),'smoke');fs.writeFileSync(path.join(post,'index.md'),'# Reader 測試\n**Date**: 2024-1-2 12:00:00\nSafe <script>bad()</script>');
 fs.writeFileSync(path.join(post,'image.png'),Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64'));
 fs.writeFileSync(path.join(post,'video.mp4'),'fixture-video-range');
-fs.writeFileSync(path.join(root,'catalog.json'),JSON.stringify({format:'takaneko-catalog',schema_version:1,total:1,posts:[{
-  resource_key:'smoke',source_id:'smoke',version:'fixture',member:'成員',kind:'post',title:'Reader 測試',published_at:'2024-01-02T12:00:00+09:00',text:'成員/投稿/index.md',
-  media:[{path:'成員/投稿/image.png',variant:'original'},{path:'成員/投稿/video.mp4',variant:'original'}]
-}]}));
 const Store=require('electron-store');new Store().set('readerRoot',root);
 const destination=path.join(output,'copies');fs.mkdirSync(destination);
 let openChoice=null,saveChoice=null;const revealed=[];
@@ -99,7 +95,7 @@ app.whenReady().then(async()=>{
     await execute('document.querySelector("[data-view=reader]").click()');await until('document.querySelectorAll("#posts .post").length === 1 && document.getElementById("scanProgress").hidden');
     assert.equal(await execute('document.querySelectorAll("#posts .post").length'),1);
     assert.equal(await execute('document.getElementById("scanProgress").hidden'),true);
-    assert.equal(await execute('document.getElementById("scanStatus").textContent'),'已載入共用索引');
+    assert.equal(await execute('document.getElementById("scanStatus").textContent'),'');
     await execute('document.querySelector("#posts .post").click()');await new Promise(r=>setTimeout(r,200));
     assert.equal(await execute('document.getElementById("detail").open'),true);
     assert.ok((await execute('document.getElementById("detailBody").textContent')).includes('Safe <script>bad()</script>'));
@@ -107,7 +103,7 @@ app.whenReady().then(async()=>{
     const response=await net.fetch(mediaUrl,{headers:{Range:'bytes=2-6'}});assert.equal(response.status,206);assert.equal(await response.text(),'xture');
     await capture('reader.png');
     assert.equal(errors.filter(e=>!e.includes('video')).length,0,errors.join('\n'));
-    fs.writeFileSync(path.join(output,'result.json'),JSON.stringify({ok:true,checks:['preload isolation','three progress bars','language switching','reader indexing','post detail','media Range','settings folder persistence','shared NAS browsing','image/video filters','save original','export post','reveal indexed files','save cancellation']}));
+    fs.writeFileSync(path.join(output,'result.json'),JSON.stringify({ok:true,checks:['preload isolation','three progress bars','language switching','reader indexing','post detail','media Range','settings folder persistence','Downloader export browsing','image/video filters','save original','export post','reveal indexed files','save cancellation']}));
     clearTimeout(timeout);console.log('Desktop smoke test passed.');app.exit(0);
   }catch(error){console.error(error.stack,errors);fs.writeFileSync(path.join(output,'result.json'),JSON.stringify({ok:false,error:error.stack,errors}));app.exit(1);}
 });

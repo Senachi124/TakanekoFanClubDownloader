@@ -1,66 +1,73 @@
 # Local Reader
 
-The Electron application uses this module to read archives from local disks,
-external drives, and already mounted NAS folders. It uses filesystem access only;
-no hosted service, database, or remote backup worker is required.
+The Electron Reader only reads formats currently produced by this Downloader:
+completed downloads and posts copied with **Save Post**. Users can select a
+Downloader output root, a folder containing saved posts, or an individual post
+folder. Content, media, and Reader views share this selection.
 
-`index.js` implements `ArchiveReader`, archive scanning, filtering, pagination,
-and safe file resolution. `catalog.js` loads existing catalog files. The Reader
-does not modify the selected archive; its cache lives in the application's
-user data directory. Copying a post or media file to another location is handled
-by `../archiveActions.js`.
+`index.js` implements `ArchiveReader`, folder scanning, filtering, pagination,
+and safe file resolution. It never modifies the selected files. The index lives
+in memory and is rebuilt from the selected folder; old disk caches are not read.
+If the source cannot be read, its list is cleared and the UI reports the error.
+The UI checks for updates every 60 seconds while a collection view is open and
+also provides manual refresh.
 
-## Supported archives
+## Completed downloads
 
-- Desktop downloads: a post folder containing `index.md`, `.post-id`, and media.
-- Existing `record.json` archives with `schema_version` 1 or 2. Relative media
-  references must stay inside the selected root; select the complete archive
-  root when records reference files in neighboring folders.
-- Catalog archives in the format below. Lists load from the catalog; post text
-  and media availability are checked when a post is opened.
+Each completed post contains `index.md`, a non-empty `.post-id`, and media files
+in the same folder. The Downloader writes `.post-id` after a successful download;
+folders without that marker are not indexed as completed downloads.
 
-## Catalog format
+```text
+exported/
+  Example member/
+    Example post/
+      index.md
+      .post-id
+      image.jpg
+      video.mp4
+  GALLERY/
+    Example album/
+      index.md
+      .post-id
+      image.jpg
+```
 
-The Reader checks these locations relative to the selected root, in order:
-`catalog.json`, `members/catalog.json`, `media/members/catalog.json`, and
-`takaneko/media/members/catalog.json`.
+The Reader uses the Markdown heading, `**Sender**`, and `**Date**` for metadata.
+Categories follow the Downloader's member, manager-blog, `GALLERY`, and `MOVIE`
+folders. Media are discovered directly within each post folder. Duplicate
+`pictures/` collections, hidden folders and incomplete `.part` folders are skipped.
 
-A catalog may contain its records directly:
+## Posts saved by the app
+
+`../archiveActions.js` copies the Markdown and original media into a separate
+folder and writes a `record.json` with `schema_version: 2`. It preserves the post's
+identity, category, member and publication date without copying unrelated files.
+This is the supported v2 layout: `text` is `index.md`, and each media `path` is a
+filename in the same folder with `variant: "original"`.
 
 ```json
 {
-  "format": "takaneko-catalog",
-  "schema_version": 1,
-  "total": 1,
-  "posts": [{
-    "resource_key": "example:1",
-    "source_id": "1",
-    "version": "example",
-    "member": "Example member",
-    "kind": "post",
-    "title": "Example post",
-    "published_at": "2024-01-02T12:00:00+09:00",
-    "text": "member/post/index.md",
-    "media": [{"path": "member/post/image.jpg", "variant": "original"}]
-  }]
+  "schema_version": 2,
+  "resource_key": "takaneko:post:example:v1",
+  "source_id": "example",
+  "kind": "post",
+  "title": "Example post",
+  "member": "Example member",
+  "published_at": "2024-01-02T03:00:00.000Z",
+  "text": "index.md",
+  "media": [{"path": "image.jpg", "variant": "original"}]
 }
 ```
 
-Alternatively, the entry file can use `format: "takaneko-catalog-pointer"` and
-`schema_version: 1`, with `catalog: ".catalog/<sha256>.json"`, the snapshot's
-byte count in `size`, and its lowercase SHA-256 digest in `sha256`. The snapshot
-contains the records shown above. Keep the `.catalog/` directory when copying
-an archive that uses a pointer.
+The `:v1` suffix in a post key is part of its identity, not the record schema
+version. Supported kinds are `post`, `blog`, `gallery`, and `movie`. A missing
+publication date is stored as `null`. A text-only post has an empty media list.
 
-Post text and media paths are relative to the entry file's directory, not the
-snapshot's `.catalog/` directory. Absolute paths, traversal, and symlinks escaping
-the selected root are rejected. Catalog files have a 128 MiB size limit.
+Legacy `record.json` v1, other v2 layouts, and external `catalog.json` or
+`.catalog/` indexes are unsupported. Catalogs are ignored; unsupported records
+are skipped with a warning. Missing media are marked unavailable. Paths and
+symlinks escaping the selected root are rejected.
 
-If no catalog is present, the Reader scans supported post folders. Invalid
-catalogs preserve the previous index and report a warning instead of triggering
-a full scan. Disconnected folders retain the cached index and show media as
-unavailable. The desktop UI checks for updates every 60 seconds while a collection
-view is open and also provides manual refresh.
-
-See `tests/reader.test.js`, `tests/catalog.test.js`, and
-`tests/archive-actions.test.js` at the repository root for isolated examples.
+See `tests/reader.test.js` and `tests/archive-actions.test.js` for current-format
+reading, saved-post round trips, unsupported formats, and source safety checks.
