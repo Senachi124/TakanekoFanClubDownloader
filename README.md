@@ -117,4 +117,6 @@ CI 分別在 Intel 與 Apple Silicon Mac 建置，檢查工具架構、最低系
 
 本 repo 專注本地 Electron 桌面程式，不包含伺服器、遠端備份或部署工具。UI 在 `src/renderer/`，共用介面元件在 `src/shared/`，桌面主程序與下載核心在 `src/main/`，本地 Reader 在 `src/main/local-reader/`。測試在 `test/`、`tests/`，打包與桌面驗證工具在 `scripts/`。
 
+開發文件見 [`docs/`](docs/README.md)，包含 [程式整體流程](docs/application-flow.md)、[API 與 IPC 索引](docs/api-reference.md)、[核心處理函式流程](docs/core-processing.md) 及 [使用者互動流程](docs/interaction-flow.md)。
+
 更新文件時，請同步維護 [繁體中文 README](README.md) 與 [日本語 README](README.ja.md)。

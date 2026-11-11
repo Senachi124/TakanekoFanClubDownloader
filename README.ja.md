@@ -119,4 +119,6 @@ CI は Intel と Apple Silicon の Mac で個別にビルドし、ツールの�
 
 このリポジトリはローカル Electron デスクトップアプリ専用です。サーバー・リモートバックアップ・デプロイツールは含みません。UI は `src/renderer/`、共通 UI は `src/shared/`、メインプロセスとダウンロード処理は `src/main/`、Reader は `src/main/local-reader/` にあります。テストは `test/`・`tests/`、パッケージとデスクトップ検証用のツールは `scripts/` にあります。
 
+開発ドキュメント（繁體中文）は [`docs/`](docs/README.md) にあります。[アプリ全体の処理フロー](docs/application-flow.md)、[API・IPC 一覧](docs/api-reference.md)、[主要関数の処理フロー](docs/core-processing.md)、[ユーザー操作のフロー](docs/interaction-flow.md) を参照してください。
+
 ドキュメントを更新する際は、[繁體中文 README](README.md) と [日本語 README](README.ja.md) の内容を揃えてください。

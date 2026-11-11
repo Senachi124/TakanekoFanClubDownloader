@@ -12,6 +12,7 @@ These instructions apply to the entire repository. This is a public source repos
 ## Repository Map
 
 - `README.md`, `README.ja.md`: user documentation in Traditional Chinese and Japanese.
+- `docs/`: developer documentation for API/IPC contracts, application architecture, core processing, and interaction flows.
 - `package.json`: Electron entry point, dependencies, npm commands, and packaging configuration.
 - `src/main/main.js`: application startup, login, and token capture.
 - `src/main/preload.js`: the renderer's allowlisted IPC bridge.
