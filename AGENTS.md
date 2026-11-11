@@ -4,33 +4,59 @@ These instructions apply to the entire repository. This is a public source repos
 
 ## Project Scope
 
-- Develop and maintain the local Electron desktop application: its UI, downloads, settings, and local archive Reader.
-- Keep application code under `src/`, including the Reader in `src/main/local-reader/`.
-- Do not add server applications, hosted web interfaces, database services, remote backup workers, server deployment templates, or infrastructure configuration unless the user explicitly changes this scope.
-- Reading an archive on an already mounted NAS is a local filesystem feature and remains supported. It does not require a server or a remote backup service.
-- Desktop installers, packaging scripts, and CI checks for the desktop application remain in scope.
+- Maintain Takaneko Fanclub Downloader, a local Electron desktop application for downloading posts, blogs, galleries, and movies and browsing saved content.
+- Keep application code under `src/`. Desktop installers, bundled media tools, packaging scripts, and CI are also in scope.
+- Keep the architecture local to the desktop application. Do not introduce hosted services or infrastructure unless explicitly requested.
+- The app currently targets Takaneko Fanclub. Do not assume compatibility with other FaveConnect sites.
 
-## Private Deployment Information and Operational Records
+## Repository Map
 
-- Do not add, extend, or copy private server deployment information or operational records belonging to the author or other users into this repository. This applies to source code, comments, documentation, `docs/`, `AGENTS.md`, test fixtures, configuration, scripts, and generated reports. Do not use the repository to store private records, even in files excluded by `.gitignore`.
-- Private information includes actual server IP addresses and domains, SSH connection details, accounts, private service topology, absolute deployment/data/NAS/backup paths, and host-specific configuration, deployment timestamps, running versions, operational history, validation output, incident records, and rollback receipts. Never write passwords, tokens, cookies, private keys, or other credentials into the repository.
-- When private deployment records must be saved, use a private location outside the repository designated by the maintainer. If no location has been designated, do not create temporary records inside the repository; ask for a destination only when the task actually requires saving them.
-- Do not copy private information from home-level instructions, other workspaces, machine configuration, or tool output into this repository. If external instructions require recording actual deployment details, keep those details in private operational documentation outside the repository.
-- Existing private deployment content is not permission to continue recording or copying it. When found, identify only the affected files and information categories; do not repeat actual values in new documentation, commit messages, or PR descriptions. Clean up as requested by the user, and do not rewrite Git history on your own initiative.
+- `README.md`, `README.ja.md`: user documentation in Traditional Chinese and Japanese.
+- `package.json`: Electron entry point, dependencies, npm commands, and packaging configuration.
+- `src/main/main.js`: application startup, login, and token capture.
+- `src/main/preload.js`: the renderer's allowlisted IPC bridge.
+- `src/main/desktopV2.js`: desktop settings, download controls, and Reader operations.
+- `src/main/downloadJob.js`, `src/main/api/`: download jobs, API access, exporters, and the archive engine.
+- `src/main/utils/`: network, concurrency, media tools, cookies, and download error handling.
+- `src/main/archiveActions.js`: saving posts and original media to another location.
+- `src/main/local-reader/`: archive scanning and reading; its `README.md` defines supported formats.
+- `src/renderer/`, `src/shared/`: UI, styles, shared helpers, and translations.
+- `test/`, `tests/`: regression tests, both included by `npm test`.
+- `scripts/`, `.github/workflows/build.yml`: desktop smoke tests, bundled tool preparation, packaging checks, and release builds.
 
-## Public Documentation
+## Implementation Guidelines
 
-- Document the desktop architecture, local setup, settings, archive formats, packaging, and tests that do not depend on private environments. Server deployment documentation is outside this repository's scope.
-- Use explicit placeholders such as `example.com`, `<SERVER_HOST>`, `<DEPLOY_ROOT>`, and `<NAS_ROOT>`, or synthetic data, in examples. Do not populate examples with private values taken from real environments.
-- Keep general usage and validation instructions separate from records of actions on a particular machine. Do not record the author's private installation or operational history.
-- Before committing, review changes and new files for private deployment information, credentials, and output from real environments. `.gitignore` does not remove information from tracked files or existing Git history.
+- Follow the existing JavaScript and CommonJS conventions. Keep changes focused and avoid unrelated formatting or dependency changes.
+- Keep filesystem access, credentials, downloads, and external tool execution in the main process. Expose renderer operations through the explicit preload allowlist and validate IPC inputs in the main process.
+- Preserve pause, resume, cancellation, retry, and progress behavior when changing downloads. Write the `.post-id` completion marker only after a successful download.
+- The Reader supports completed download folders with `index.md` and `.post-id`, and app-generated saved posts with `record.json` schema v2. Consult the Reader documentation before changing these formats; legacy records and external catalogs are unsupported.
+- Reader indexing stays in memory and must not modify source files. Preserve path and symlink containment checks, missing-media handling, and clearing stale results when the source cannot be read.
+- Saving a post or media file copies it to the selected destination without changing the source. Changing the download location must not move existing files.
+- Display publication times in JST (UTC+9), using a 24-hour clock in both UI languages. Missing or invalid publication dates remain unknown; do not substitute the current time or filesystem timestamps.
+- Keep Traditional Chinese and Japanese UI text aligned. Update both README language versions when documented behavior changes.
+- Preserve the app ID and user-data compatibility unless a migration is explicitly part of the task.
 
-## Where to Start Reading
+## Development and Validation
 
-- `README.md`, `package.json`: features, the desktop entry point, and development and build commands.
-- `src/main/main.js`, `src/main/preload.js`, `src/main/desktopV2.js`: Electron startup, communication between the UI and main process, and download/Reader operations.
-- `src/renderer/`, `src/shared/`: the desktop UI, reusable UI helpers, styles, and translations.
-- `src/main/downloadJob.js`, `src/main/api/archiveEngine.js`: desktop download jobs and the download engine.
-- `src/main/local-reader/`: the local Reader and supported archive and catalog formats.
-- `test/`, `tests/`: behavior examples and regression tests.
-- `scripts/`, `.github/workflows/build.yml`: desktop smoke checks, packaging validation, and release builds.
+Use Node.js 22 and npm, matching CI:
+
+```sh
+npm ci
+npm start
+npm test
+npm run check:release
+```
+
+- Run relevant regression tests for behavior changes. A single test file can be run with `node tests/<name>.test.js` or `node test/<name>.test.js`; run `npm test` and `npm run check:release` before completing code or packaging changes.
+- For UI or Electron integration changes, run `npm run test:desktop` in an environment that can launch Electron. Report any checks that could not run and why.
+- Build Windows packages with `npm run build:win`. Build macOS packages with `npm run build:mac`, optionally using `-- --x64` or `-- --arm64`, on the corresponding platform.
+- For packaging changes, validate built artifacts with `node scripts/check-release.js --packages`. Actual bundled tool execution must be checked on the target platform and architecture.
+- Keep bundled tool versions, checksums, architecture checks, and license files consistent when updating media tools.
+- Documentation-only changes need a diff and accuracy review; application tests are unnecessary unless executable behavior also changes.
+
+## Privacy and Public Contributions
+
+- Never add credentials, tokens, cookies, private keys, account details, member-only content, personal archives, or private machine configuration to the repository, including ignored files and fixtures.
+- Use synthetic content and placeholder paths in tests and documentation. Keep private operational records outside the repository; do not copy them from other workspaces or tool output.
+- Keep authentication data in the application's user-data storage and out of logs, exported archives, and release packages.
+- Before committing, inspect the diff and new files for sensitive data and unintended generated artifacts. If existing sensitive material is found, identify affected files without repeating its values; do not rewrite Git history without explicit instruction.
