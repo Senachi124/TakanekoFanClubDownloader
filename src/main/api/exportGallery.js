@@ -1,40 +1,9 @@
-const net = require('../utils/network');
+const { gallery } = require('./takaneko');
 const { safeTitle, formatDateForFilename, formatTimestamp } = require('../utils/officialMedia');
 const { downloadToFile } = require('./downloadToFile');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
-
-function fetchJson(url, token) {
-  return new Promise((resolve, reject) => {
-    const request = net.request(url);
-    if (token) {
-      // 修正：避免重複加上 Bearer
-      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-      request.setHeader('Authorization', authHeader);
-    }
-    request.setHeader('Accept', 'application/json, text/plain, */*');
-    request.setHeader('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36');
-
-    let body = '';
-    request.on('response', (response) => {
-      if (response.statusCode !== 200) {
-        reject(new Error(`HTTP ${response.statusCode} while fetching ${url}`));
-        return;
-      }
-      response.on('data', chunk => body += chunk.toString('utf-8'));
-      response.on('end', () => {
-        try {
-          resolve(JSON.parse(body));
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-    request.on('error', reject);
-    request.end();
-  });
-}
 
 const IMAGE_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
@@ -53,8 +22,7 @@ async function handleBackupGallery(token, rootExportPath, state, onProgress, sel
 
   while (!selectedItem && page <= totalPages) {
     if (state && state.isCancelled) throw new Error('Cancelled by user');
-    const listUrl = `https://api.takanekofc.com/gallery/queries/getGalleryAlbumList?page=${page}&pageSize=20`;
-    const res = await fetchJson(listUrl, token);
+    const res = await gallery.list(token, page);
 
     if (!Array.isArray(res.galleryAlbumList)) throw new Error('Invalid gallery list');
     totalPages = res.totalPages || 1;
@@ -76,8 +44,7 @@ async function handleBackupGallery(token, rootExportPath, state, onProgress, sel
     }
 
     try {
-      const detailUrl = `https://api.takanekofc.com/gallery/queries/getGalleryAlbumDetail/${encodeURIComponent(item.id)}`;
-      const detail = await fetchJson(detailUrl, token);
+      const detail = await gallery.detail(token, item.id);
       state?.onDetails?.();
 
       const releaseStr = formatDateForFilename(detail.displayDate || detail.createdAt);

@@ -1,26 +1,20 @@
 const fs = require('fs/promises');
 const path = require('path');
-const { handleGetAllPosts } = require('./getAllPosts');
+const { notifications, blogs, gallery, movies } = require('./takaneko');
 const { processSinglePost } = require('./exportPosts');
 const { handleBackupTopicsBlogs } = require('./exportBlogs');
 const { handleBackupGallery } = require('./exportGallery');
 const { handleBackupMovies } = require('./exportMovies');
 
-async function json(url, token) {
-  const r = await fetch(url, { headers: { Authorization: token.startsWith('Bearer ') ? token : `Bearer ${token}` }, signal: AbortSignal.timeout(30000) });
-  if (!r.ok) throw new Error(`Fanclub HTTP ${r.status}`);
-  return r.json();
-}
-
 async function run(input, state = {}, onEvent = () => {}) {
   if (input.action === 'list') {
-    const posts = await handleGetAllPosts(input.token);
+    const posts = await notifications.listAll(input.token);
     const items = posts.filter(p => p.notificationReservationId).map(p => ({
       kind: 'post', id: String(p.notificationReservationId), title: p.title || p.subject || ''
     }));
     if (input.blogs) {
       for (let page = 1, pages = 1; page <= pages; page++) {
-        const r = await json(`https://api.takanekofc.com/blog/queries/getArticleList?blogId=topics&page=${page}&categories=nuzufcwpxr5s3iip`, input.token);
+        const r = await blogs.list(input.token, page);
         if (!Array.isArray(r.articleList)) throw new Error('Invalid blog list');
         pages = r.totalPages || 1;
         items.push(...r.articleList.map(p => ({ kind: 'blog', id: String(p.id), title: p.title || '' })));
@@ -28,9 +22,9 @@ async function run(input, state = {}, onEvent = () => {}) {
     }
     for (const [enabled,kind,listName] of [[input.gallery,'gallery','galleryAlbumList'],[input.movies,'movie','movieList']]) {
       if (!enabled) continue;
-      const endpoint = kind === 'gallery' ? 'getGalleryAlbumList' : 'getMovieList';
+      const source = kind === 'gallery' ? gallery : movies;
       for (let page=1,pages=1; page<=pages; page++) {
-        const result=await json(`https://api.takanekofc.com/${kind}/queries/${endpoint}?page=${page}&pageSize=20`,input.token);
+        const result=await source.list(input.token, page);
         if (!Array.isArray(result[listName])) throw new Error(`Invalid ${kind} list`);
         pages=result.totalPages || 1;
         items.push(...result[listName].map(item=>({kind,id:String(item.id),title:item.title || ''})));
@@ -48,7 +42,7 @@ async function run(input, state = {}, onEvent = () => {}) {
   } else if (item.kind === 'blog') {
     completedFolder = await handleBackupTopicsBlogs(input.token, input.directory, state, null, item);
   } else {
-    const data = await json('https://api.takanekofc.com/auth/notifications/' + encodeURIComponent(item.id), input.token);
+    const data = await notifications.detail(input.token, item.id);
     state.onDetails();
     completedFolder = await processSinglePost({ ...data, notificationReservationId: item.id }, input.directory, true);
   }

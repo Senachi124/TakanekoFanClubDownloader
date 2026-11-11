@@ -27,8 +27,8 @@
 
 | 項目 | 參考程式與需確認的內容 |
 |---|---|
-| 登入與 Token | [`src/main/main.js`](src/main/main.js)：登入網址、Token 擷取的請求網域與驗證流程。 |
-| 內容清單與詳情 | [`src/main/api/getAllPosts.js`](src/main/api/getAllPosts.js)、[`src/main/api/archiveEngine.js`](src/main/api/archiveEngine.js)：API 網址、分頁、回傳欄位、部落格與分類識別碼。 |
+| 登入與 Token | [`src/main/main.js`](src/main/main.js)：登入網址與 Token 擷取流程；API 請求網域篩選由 [`takaneko/config.js`](src/main/api/takaneko/config.js) 提供。 |
+| 內容清單與詳情 | [`src/main/api/takaneko/`](src/main/api/takaneko/)：API 網域、共用 JSON 請求、通知／Blog／Gallery／Movie 端點與分類識別碼；[`archiveEngine.js`](src/main/api/archiveEngine.js) 負責分頁彙整及下載分派。 |
 | 投稿與媒體保存 | [`src/main/api/exportPosts.js`](src/main/api/exportPosts.js)、[`exportBlogs.js`](src/main/api/exportBlogs.js)、[`exportGallery.js`](src/main/api/exportGallery.js)、[`exportMovies.js`](src/main/api/exportMovies.js)：內容解析、相對網址、Referer 與影片來源。 |
 | 本地閱讀 | [`src/main/local-reader/`](src/main/local-reader/README.md)：讓產生的 archive 符合支援格式，並確認媒體相對路徑。 |
 
@@ -118,5 +118,7 @@ CI 分別在 Intel 與 Apple Silicon Mac 建置，檢查工具架構、最低系
 本 repo 專注本地 Electron 桌面程式，不包含伺服器、遠端備份或部署工具。UI 在 `src/renderer/`，共用介面元件在 `src/shared/`，桌面主程序與下載核心在 `src/main/`，本地 Reader 在 `src/main/local-reader/`。測試在 `test/`、`tests/`，打包與桌面驗證工具在 `scripts/`。
 
 開發文件見 [`docs/`](docs/README.md)，包含 [程式整體流程](docs/application-flow.md)、[API 與 IPC 索引](docs/api-reference.md)、[核心處理函式流程](docs/core-processing.md) 及 [使用者互動流程](docs/interaction-flow.md)。
+
+Fanclub API 集中在 `src/main/api/takaneko/`：`config.js` 管理網域與固定分類，`client.js` 處理 Bearer、HTTP／JSON 錯誤及逾時，`notifications.js`、`blogs.js`、`gallery.js`、`movies.js` 管理各類端點。下載排程與檔案匯出透過這一層取得資料；圖片與第三方影片仍使用各自的下載流程。
 
 更新文件時，請同步維護 [繁體中文 README](README.md) 與 [日本語 README](README.ja.md)。

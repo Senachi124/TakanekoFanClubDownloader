@@ -12,8 +12,11 @@ flowchart TD
     Bridge --> Desktop[desktopV2.setup：桌面操作]
     Desktop --> Job[downloadJob：排程與進度]
     Job --> Engine[archiveEngine.run：清單與類型分派]
-    Engine --> API[Fanclub HTTP API]
+    Engine --> Resources[takaneko：各類端點模組]
     Engine --> Exporters[Post / Blog / Gallery / Movie exporter]
+    Exporters --> Resources
+    Resources --> Client[client.getJson：Bearer、逾時、JSON]
+    Client --> API[Fanclub HTTP API]
     Exporters --> Images[downloadToFile]
     Exporters --> Tools[yt-dlp 與 ffmpeg]
     Images --> Archive[本地下載資料夾]
@@ -35,6 +38,7 @@ flowchart TD
 | [desktopV2.js](../src/main/desktopV2.js) | 註冊目前 UI 使用的桌面 IPC、下載互斥鎖、Reader 實例、檔案對話框、媒體串流 |
 | [downloadJob.js](../src/main/downloadJob.js) | 清單去重、跳過既有投稿、worker 併發、三階段進度及錯誤彙整 |
 | [archiveEngine.js](../src/main/api/archiveEngine.js) | 將統一的工作項目分派到各內容類型的 exporter，確認完成標記 |
+| [api/takaneko/](../src/main/api/takaneko/) | 集中管理 API origin、登入請求篩選、分類值、各類端點與共用 JSON 請求 |
 | [local-reader/index.js](../src/main/local-reader/index.js) | 只讀掃描、格式驗證、篩選分頁、檔案與符號連結邊界檢查 |
 | [renderer.js](../src/renderer/renderer.js) | 分頁、篩選、詳情、下載按鈕與原生操作結果呈現 |
 
@@ -71,7 +75,7 @@ sequenceDiagram
 
 1. UI 先儲存下載設定，再呼叫 `start-download`。
 2. `desktopV2` 檢查是否已有工作、是否有 Token，鎖定工作並重設暫停／取消旗標。
-3. `downloadJob` 取得通知及已啟用的 Blog／Gallery／Movie 清單，以 `kind:id` 去重。
+3. `downloadJob` 經由 engine 呼叫 `takaneko` 資源模組，取得通知及已啟用的 Blog／Gallery／Movie 清單，以 `kind:id` 去重。
 4. Reader 掃描下載位置，建立可跳過的既有投稿集合。
 5. worker 透過 `archiveEngine.run({action:'download', ...})` 取得詳情及媒體；成功寫入 `.post-id` 才視為完成。
 6. 主程序推送 `job-progress`，UI 更新清單、詳情、檔案三條進度與錯誤列表。
@@ -110,7 +114,7 @@ flowchart LR
 
 ## 目前實作邊界
 
-- `getPostDetails.handleGetPostDetails` 與 `exportPosts.handleExportPosts` 是保留的批次 helper；目前 UI 主流程不呼叫它們。一般投稿直接由 engine 取得詳情，再呼叫 `processSinglePost(..., true)`。
+- `getPostDetails.handleGetPostDetails` 與 `exportPosts.handleExportPosts` 是保留的批次 helper；目前 UI 主流程不呼叫它們。`getAllPosts.handleGetAllPosts` 保留為 `notifications.listAll()` 的相容入口。一般投稿由 engine 呼叫 `notifications.detail()`，再呼叫 `processSinglePost(..., true)`。
 - 主程序仍註冊少數未加入 preload allowlist 的 handler；不能因為看到 `ipcMain.handle` 就認定目前 renderer 能呼叫，詳見 [API 索引](api-reference.md)。
 - 暫停／停止是共用旗標與檢查點，不會立即中止所有 HTTP 串流或外部程序。
 - [videoQueue.js](../src/main/utils/videoQueue.js) 的兩個 slot 限制只用於非 Electron 執行環境；Electron 路徑直接執行 callback。目前 UI／README 的「影片同時最多 2 個」文字與這段實作不一致，不能用該文字推斷桌面端已有全域兩影片限制。

@@ -18,6 +18,7 @@
 | Electron 啟動與登入 | [main.js](../src/main/main.js) |
 | UI 與主程序的橋接 | [preload.js](../src/main/preload.js)、[desktopV2.js](../src/main/desktopV2.js) |
 | 下載排程與分派 | [downloadJob.js](../src/main/downloadJob.js)、[archiveEngine.js](../src/main/api/archiveEngine.js) |
+| Fanclub API 端點與請求 | [takaneko/index.js](../src/main/api/takaneko/index.js)、[client.js](../src/main/api/takaneko/client.js)、[config.js](../src/main/api/takaneko/config.js) |
 | 本地檔案閱讀與另存 | [local-reader/index.js](../src/main/local-reader/index.js)、[archiveActions.js](../src/main/archiveActions.js) |
 | 畫面與共用 UI | [renderer.js](../src/renderer/renderer.js)、[ui.js](../src/shared/ui.js)、[youtube-settings.js](../src/shared/youtube-settings.js) |
 
@@ -26,6 +27,7 @@
 ## 維護方式
 
 - 新增 IPC 時，同步檢查 preload allowlist、主程序 handler、renderer 呼叫與 API 表格。
+- Fanclub 端點統一放在 `src/main/api/takaneko/`；新增或調整端點時，同步更新 API 索引與 `tests/takaneko-api.test.js`，exporter 不自行組合 API URL。
 - 修改下載、完成標記或 Reader 格式時，同步更新對應流程圖與行為說明。
 - 文件描述目前可觀察到的實作；已存在的限制應明確標示，避免把預期行為寫成已實現的保證。
 - 範例使用合成資料或佔位符，不附上真實 Token、cookies、會員內容、私人路徑或執行紀錄。

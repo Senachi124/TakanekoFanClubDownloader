@@ -1,4 +1,4 @@
-const net = require('../utils/network');
+const { movies } = require('./takaneko');
 const { safeTitle, formatDateForFilename, formatTimestamp } = require('../utils/officialMedia');
 const { downloadToFile } = require('./downloadToFile');
 const fs = require('fs').promises;
@@ -32,36 +32,6 @@ function movieThumbnail(value) {
   if(url.protocol==='http:' && ['img.youtube.com','i.ytimg.com'].includes(url.hostname) && !url.port && !url.username && !url.password) url.protocol='https:';
   if(url.protocol!=='https:' || url.username || url.password) throw failure('HTTPS_REQUIRED','HTTPS required');
   return url.href;
-}
-
-function fetchJson(url, token) {
-  return new Promise((resolve, reject) => {
-    const request = net.request(url);
-    if (token) {
-      const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-      request.setHeader('Authorization', authHeader);
-    }
-    request.setHeader('Accept', 'application/json, text/plain, */*');
-    request.setHeader('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36');
-
-    let body = '';
-    request.on('response', (response) => {
-      if (response.statusCode !== 200) {
-        reject(new Error(`HTTP ${response.statusCode} while fetching ${url}`));
-        return;
-      }
-      response.on('data', chunk => body += chunk.toString('utf-8'));
-      response.on('end', () => {
-        try {
-          resolve(JSON.parse(body));
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-    request.on('error', reject);
-    request.end();
-  });
 }
 
 const IMAGE_HEADERS = {
@@ -124,8 +94,7 @@ async function handleBackupMovies(token, rootExportPath, state, onProgress, sele
 
   while (!selectedItem && page <= totalPages) {
     if (state && state.isCancelled) throw new Error('Cancelled by user');
-    const listUrl = `https://api.takanekofc.com/movie/queries/getMovieList?page=${page}&pageSize=20`;
-    const res = await fetchJson(listUrl, token);
+    const res = await movies.list(token, page);
 
     if (!Array.isArray(res.movieList)) throw new Error('Invalid movie list');
     totalPages = res.totalPages || 1;
@@ -148,8 +117,7 @@ async function handleBackupMovies(token, rootExportPath, state, onProgress, sele
 
     let stage='details';const issues=[];
     try {
-      const detailUrl = `https://api.takanekofc.com/movie/queries/getMovieDetail/${encodeURIComponent(item.id)}`;
-      const detail = await fetchJson(detailUrl, token);
+      const detail = await movies.detail(token, item.id);
       state?.onDetails?.();
 
       const releaseStr = formatDateForFilename(detail.displayDate || detail.createdAt);

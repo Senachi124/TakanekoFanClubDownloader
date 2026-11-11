@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, shell, dialog, session, protocol } = requir
 const path = require('path');
 const Store = require('electron-store');
 const packageInfo = require('../../package.json');
+const { API_REQUEST_PATTERN } = require('./api/takaneko/config');
 
 protocol.registerSchemesAsPrivileged([{scheme:'archive',privileges:{standard:true,secure:true,supportFetchAPI:true,stream:true}}]);
 const store = new Store();
@@ -58,9 +59,6 @@ app.on('window-all-closed', () => {
 });
 
 // IPC Handlers
-const { handleGetAllPosts } = require('./api/getAllPosts');
-const { handleGetPostDetails } = require('./api/getPostDetails');
-const { handleExportPosts } = require('./api/exportPosts');
 
 // Get saved token
 ipcMain.handle('get-token', () => {
@@ -125,7 +123,7 @@ ipcMain.handle('capture-token', async () => {
 
   return new Promise((resolve) => {
     let isResolved = false; // Prevent duplicate resolve
-    const filter = { urls: ['https://api.takanekofc.com/*'] };
+    const filter = { urls: [API_REQUEST_PATTERN] };
 
     // 1. Define success handler
     const handleSuccess = (token) => {

@@ -47,16 +47,18 @@ flowchart TD
 
 原始碼：[archiveEngine.js](../src/main/api/archiveEngine.js)。清單結果統一為 `{kind,id,title}`，`kind` 為 `post`、`blog`、`gallery`、`movie`。
 
+所有 Fanclub JSON 請求都經由 [api/takaneko](../src/main/api/takaneko/index.js) 資源模組。engine 保留清單分頁與類型分派，資源模組負責 URL／query，共用 [client.getJson](../src/main/api/takaneko/client.js) 負責 Bearer、HTTP／JSON 錯誤與逾時；exporter 不再內建 HTTP helper。
+
 ```mermaid
 flowchart TD
     Input[run input] --> Action{action}
-    Action -->|list| Posts[handleGetAllPosts：通知]
-    Posts --> Blogs[依設定加入 Blog 分頁清單]
-    Blogs --> Official[依設定加入 Gallery 與 Movie 分頁清單]
+    Action -->|list| Posts[notifications.listAll：通知]
+    Posts --> Blogs[blogs.list：依設定加入分頁清單]
+    Blogs --> Official[gallery.list / movies.list：依設定加入分頁清單]
     Official --> Items[回傳統一 items]
     Action -->|download| State[建立繼承共用 state 的物件並附 onDetails]
     State --> Kind{item.kind}
-    Kind -->|post| PostDetail[GET 通知詳情 → onDetails]
+    Kind -->|post| PostDetail[notifications.detail → onDetails]
     PostDetail --> Post[processSinglePost：strict=true]
     Kind -->|blog| Blog[handleBackupTopicsBlogs：selectedArticle]
     Kind -->|gallery| Gallery[handleBackupGallery：selectedItem]
@@ -202,6 +204,7 @@ flowchart TD
 
 | 回歸測試 | 覆蓋重點 |
 | --- | --- |
+| [takaneko-api.test.js](../tests/takaneko-api.test.js) | 端點／query、ID 編碼、Bearer、通知回傳格式、HTTP／JSON 失敗、逾時、engine 與相容入口整合 |
 | [progress.test.js](../tests/progress.test.js) | 三階段進度、跳過、失敗、停止後不再排新項目 |
 | [download-core.test.js](../tests/download-core.test.js) | 併發、網路 adapter、非 Electron 影片 slot、投稿完成標記 |
 | [downloadToFile.test.js](../test/downloadToFile.test.js) | 串流、HTTP 失敗、大小限制、逾時、清理與原子寫入 |

@@ -1,4 +1,4 @@
-const net = require('../utils/network');
+const { notifications: notificationApi } = require('./takaneko');
 const fs = require('fs').promises;
 const path = require('path');
 
@@ -22,47 +22,6 @@ async function checkState(state) {
     }
     console.log('▶️ [Step 2] Process RESUMED.');
   }
-}
-
-/**
- * Helper: Make request with timeout handling
- */
-function makeRequest(url, headers) {
-  return new Promise((resolve, reject) => {
-    const request = net.request(url);
-    
-    const timeout = setTimeout(() => {
-      request.abort();
-      reject(new Error('Timeout'));
-    }, 15000);
-
-    Object.entries(headers).forEach(([key, value]) => {
-      request.setHeader(key, value);
-    });
-
-    let data = '';
-
-    request.on('response', (response) => {
-      response.on('data', (chunk) => data += chunk.toString());
-      
-      response.on('end', () => {
-        clearTimeout(timeout);
-        try {
-          const json = JSON.parse(data);
-          resolve({ status: response.statusCode, data: json });
-        } catch (e) {
-          resolve({ status: response.statusCode, data: null, error: 'JSON Parse Error' });
-        }
-      });
-    });
-
-    request.on('error', (error) => {
-      clearTimeout(timeout);
-      reject(error);
-    });
-
-    request.end();
-  });
 }
 
 async function collectPostFolders(exportedPath) {
@@ -125,8 +84,6 @@ async function loadExistingPostIds(exportedPath, state, initialConcurrency) {
  * Step 2: Fetch detailed content for each notification
  */
 async function handleGetPostDetails(token, notifications, exportedPath, state, onProgress, concurrency = DEFAULT_CONCURRENCY) {
-  const headers = { Authorization: token };
-  const apiUrl = 'https://api.takanekofc.com/auth/notifications/';
 
   const validPosts = [];
   const total = notifications.length;
@@ -160,12 +117,12 @@ async function handleGetPostDetails(token, notifications, exportedPath, state, o
       if (!id) return null;
 
       try {
-        const response = await makeRequest(apiUrl + id, headers);
-        if (response.status === 200 && response.data) {
+        const data = await notificationApi.detail(token, id, { timeoutMs: 15000 });
+        if (data) {
           // Allow system messages with missing sendingOfficialUserId
-          const senderId = response.data.sendingOfficialUserId || DEFAULT_SYSTEM_USER_ID;
+          const senderId = data.sendingOfficialUserId || DEFAULT_SYSTEM_USER_ID;
           return { 
-            ...response.data, 
+            ...data,
             sendingOfficialUserId: senderId,
             notificationReservationId: id 
           };

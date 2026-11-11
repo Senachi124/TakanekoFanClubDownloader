@@ -29,8 +29,8 @@ Takaneko Fanclub（高嶺のなでしこオフィシャルファンクラブ）�
 
 | 項目 | 参考コードと確認事項 |
 |---|---|
-| ログインと Token | [`src/main/main.js`](src/main/main.js)：ログイン URL、Token 取得の対象ドメイン、認証フロー。 |
-| 一覧と詳細 | [`src/main/api/getAllPosts.js`](src/main/api/getAllPosts.js)、[`src/main/api/archiveEngine.js`](src/main/api/archiveEngine.js)：API URL、ページング、レスポンス項目、ブログとカテゴリの識別子。 |
+| ログインと Token | [`src/main/main.js`](src/main/main.js)：ログイン URL と Token 取得フロー。API リクエストの対象ドメインは [`takaneko/config.js`](src/main/api/takaneko/config.js) で管理します。 |
+| 一覧と詳細 | [`src/main/api/takaneko/`](src/main/api/takaneko/)：API ドメイン、共通 JSON リクエスト、通知／Blog／Gallery／Movie のエンドポイントとカテゴリ識別子。[`archiveEngine.js`](src/main/api/archiveEngine.js) はページング結果の集約とダウンロードの振り分けを担当します。 |
 | 投稿とメディアの保存 | [`src/main/api/exportPosts.js`](src/main/api/exportPosts.js)、[`exportBlogs.js`](src/main/api/exportBlogs.js)、[`exportGallery.js`](src/main/api/exportGallery.js)、[`exportMovies.js`](src/main/api/exportMovies.js)：コンテンツ解析、相対 URL、Referer、動画の配信元。 |
 | ローカル閲覧 | [`src/main/local-reader/`](src/main/local-reader/README.md)：生成するアーカイブの対応形式とメディアの相対パス。 |
 
@@ -120,5 +120,7 @@ CI は Intel と Apple Silicon の Mac で個別にビルドし、ツールの�
 このリポジトリはローカル Electron デスクトップアプリ専用です。サーバー・リモートバックアップ・デプロイツールは含みません。UI は `src/renderer/`、共通 UI は `src/shared/`、メインプロセスとダウンロード処理は `src/main/`、Reader は `src/main/local-reader/` にあります。テストは `test/`・`tests/`、パッケージとデスクトップ検証用のツールは `scripts/` にあります。
 
 開発ドキュメント（繁體中文）は [`docs/`](docs/README.md) にあります。[アプリ全体の処理フロー](docs/application-flow.md)、[API・IPC 一覧](docs/api-reference.md)、[主要関数の処理フロー](docs/core-processing.md)、[ユーザー操作のフロー](docs/interaction-flow.md) を参照してください。
+
+Fanclub API は `src/main/api/takaneko/` に集約しています。`config.js` はドメインと固定カテゴリ、`client.js` は Bearer 認証・HTTP／JSON エラー・タイムアウト、`notifications.js`・`blogs.js`・`gallery.js`・`movies.js` は各エンドポイントを管理します。ダウンロードのスケジューリングとファイル出力はこの層からデータを取得し、画像と外部動画はそれぞれのダウンロード処理を使用します。
 
 ドキュメントを更新する際は、[繁體中文 README](README.md) と [日本語 README](README.ja.md) の内容を揃えてください。

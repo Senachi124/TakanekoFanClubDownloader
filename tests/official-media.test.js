@@ -11,13 +11,14 @@ test('Archive listing honors official-media toggles and paginates each source',a
   const u=new URL(url);seen.push(u.pathname);
   if(u.pathname.endsWith('/count'))return Response.json({count:1});
   if(u.pathname==='/auth/notifications')return Response.json([{notificationReservationId:'post'}]);
+  if(u.pathname.includes('getArticleList'))return Response.json({totalPages:2,articleList:[{id:'blog-'+u.searchParams.get('page')}]});
   if(u.pathname.includes('Gallery'))return Response.json({totalPages:2,galleryAlbumList:[{id:'album-'+u.searchParams.get('page')}]});
   if(u.pathname.includes('Movie'))return Response.json({totalPages:1,movieList:[{id:'movie'}]});
   throw new Error('Unexpected URL');
  };
  try {
-  const items=await run({action:'list',token:'Bearer fixture',gallery:true,movies:true});
-  assert.deepEqual(items.map(i=>i.kind),['post','gallery','gallery','movie']);
+  const items=await run({action:'list',token:'Bearer fixture',blogs:true,gallery:true,movies:true});
+  assert.deepEqual(items.map(i=>i.kind),['post','blog','blog','gallery','gallery','movie']);
   seen.length=0;assert.equal((await run({action:'list',token:'Bearer fixture',gallery:false,movies:false})).length,1);
   assert.equal(seen.length,2);
  } finally {global.fetch=previous;}

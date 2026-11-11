@@ -2,31 +2,63 @@
 
 本頁將「API 節點」分為上游 HTTP 端點、桌面內部 IPC，以及本地媒體協定。以下皆以原始碼的呼叫方式為準；範例中的 `{id}`、`{page}` 等符號是佔位符。
 
+## API 目錄與依賴方向
+
+Fanclub API 集中在 [`src/main/api/takaneko/`](../src/main/api/takaneko/)。engine 與 exporter 呼叫資源模組，資源模組透過共用 client 發送 JSON 請求；此目錄不負責寫 archive、排程下載或操作 UI。
+
+```text
+src/main/api/takaneko/
+  config.js         API origin、登入監聽 pattern、固定分類與媒體 API header
+  client.js         getJson：網域檢查、Bearer、逾時與 HTTP/JSON 錯誤
+  notifications.js  count / list / listAll / detail
+  blogs.js          list / detail
+  gallery.js        list / detail
+  movies.js         list / detail
+  index.js          四個資源模組的共用入口
+```
+
+```mermaid
+flowchart LR
+    Callers[archiveEngine / exporters / 相容 helper] --> Resources[notifications / blogs / gallery / movies]
+    Resources --> Client[client.getJson]
+    Config[config] --> Client
+    Config --> Login[main.js 登入請求篩選]
+    Client --> Network[network.fetch]
+    Network --> API[Fanclub API]
+```
+
+資源方法的第一個參數是 Token。`list(token, page=1)` 回傳上游分頁物件；`detail(token, id)` 回傳詳情物件。通知的 `list(token, limit)` 使用總量而非頁數；`listAll(token)` 封裝總數查詢及陣列／`items`／`data` 格式相容處理。其餘清單的分頁迴圈仍由 engine 或 exporter 控制。
+
+新增端點時，在對應資源檔組合路徑與 query，透過 `client.getJson()` 請求，再由呼叫端處理業務流程。不要在 exporter 重建 API 網域、Bearer 或 JSON request helper。既有 [getAllPosts.js](../src/main/api/getAllPosts.js) 只保留 `handleGetAllPosts()` 相容入口，委派給 `notifications.listAll()`。
+
 ## Fanclub HTTP 端點
 
 API base URL 為 `https://api.takanekofc.com`。下列請求皆為 `GET`，需要使用者具有相應存取權限的 `Authorization: Bearer <TOKEN>`。登入視窗載入的是 `https://takanekofc.com/#/login`，不是由本程式另行實作帳密登入 API。
 
-| 用途 | 相對路徑與 query | 程式使用的回傳欄位 | 呼叫位置 |
+| 用途 | 相對路徑與 query | 程式使用的回傳欄位 | 端點管理位置 |
 | --- | --- | --- | --- |
-| 通知總數 | `/auth/notifications/count` | `count` 或 `total`；未取得 truthy 值時使用 1000 | [handleGetAllPosts](../src/main/api/getAllPosts.js) |
-| 通知清單 | `/auth/notifications?offset=0&limit={count}&orderType=2&readType=all` | 陣列本身，或 `items`／`data`；每項的 `notificationReservationId`、`title`／`subject` | [handleGetAllPosts](../src/main/api/getAllPosts.js) |
-| 單篇通知詳情 | `/auth/notifications/{id}` | `title`／`subject`、`sendingOfficialUserId`、`body*`、`image*`、文字與日期欄位 | [archiveEngine.run](../src/main/api/archiveEngine.js)、[processSinglePost](../src/main/api/exportPosts.js) |
-| 經理人部落格清單 | `/blog/queries/getArticleList?blogId=topics&page={page}&categories={categoryId}` | `articleList`、`totalPages`；每項的 `id`、`title` | [archiveEngine](../src/main/api/archiveEngine.js)、[exportBlogs](../src/main/api/exportBlogs.js) |
-| 部落格詳情 | `/blog/queries/getArticleDetail/{id}` | `title`、`body`、`thumbnail`、`displayDate`／`createdAt` | [handleBackupTopicsBlogs](../src/main/api/exportBlogs.js) |
-| Gallery 清單 | `/gallery/queries/getGalleryAlbumList?page={page}&pageSize=20` | `galleryAlbumList`、`totalPages` | [archiveEngine](../src/main/api/archiveEngine.js)、[exportGallery](../src/main/api/exportGallery.js) |
-| Gallery 詳情 | `/gallery/queries/getGalleryAlbumDetail/{id}` | `title`、`thumbnail`、`description`、`galleryAlbumItems[].file`、日期欄位 | [handleBackupGallery](../src/main/api/exportGallery.js) |
-| Movies 清單 | `/movie/queries/getMovieList?page={page}&pageSize=20` | `movieList`、`totalPages` | [archiveEngine](../src/main/api/archiveEngine.js)、[exportMovies](../src/main/api/exportMovies.js) |
-| Movie 詳情 | `/movie/queries/getMovieDetail/{id}` | `movieType`、`videoId`、`thumbnail`、`title`、`description`、日期欄位 | [handleBackupMovies](../src/main/api/exportMovies.js) |
+| 通知總數 | `/auth/notifications/count` | `count` 或 `total`；未取得 truthy 值時使用 1000 | [notifications.count](../src/main/api/takaneko/notifications.js) |
+| 通知清單 | `/auth/notifications?offset=0&limit={count}&orderType=2&readType=all` | 陣列本身，或 `items`／`data`；每項的 `notificationReservationId`、`title`／`subject` | [notifications.list / listAll](../src/main/api/takaneko/notifications.js) |
+| 單篇通知詳情 | `/auth/notifications/{id}` | `title`／`subject`、`sendingOfficialUserId`、`body*`、`image*`、文字與日期欄位 | [notifications.detail](../src/main/api/takaneko/notifications.js) |
+| 經理人部落格清單 | `/blog/queries/getArticleList?blogId=topics&page={page}&categories={categoryId}` | `articleList`、`totalPages`；每項的 `id`、`title` | [blogs.list](../src/main/api/takaneko/blogs.js) |
+| 部落格詳情 | `/blog/queries/getArticleDetail/{id}` | `title`、`body`、`thumbnail`、`displayDate`／`createdAt` | [blogs.detail](../src/main/api/takaneko/blogs.js) |
+| Gallery 清單 | `/gallery/queries/getGalleryAlbumList?page={page}&pageSize=20` | `galleryAlbumList`、`totalPages` | [gallery.list](../src/main/api/takaneko/gallery.js) |
+| Gallery 詳情 | `/gallery/queries/getGalleryAlbumDetail/{id}` | `title`、`thumbnail`、`description`、`galleryAlbumItems[].file`、日期欄位 | [gallery.detail](../src/main/api/takaneko/gallery.js) |
+| Movies 清單 | `/movie/queries/getMovieList?page={page}&pageSize=20` | `movieList`、`totalPages` | [movies.list](../src/main/api/takaneko/movies.js) |
+| Movie 詳情 | `/movie/queries/getMovieDetail/{id}` | `movieType`、`videoId`、`thumbnail`、`title`、`description`、日期欄位 | [movies.detail](../src/main/api/takaneko/movies.js) |
 
 `categoryId` 使用程式中固定的經理人部落格分類值，並非 UI 可設定項目。Blog／Gallery／Movie 清單從第 1 頁讀到 `totalPages`，缺少頁數時採 1；通知清單則先查總數，再以一次 `offset=0` 請求取得資料，沒有逐頁迴圈。通知清單未限定 `notificationType=message`。
 
 ### 驗證與網路路徑
 
-- `capture-token` 監聽登入視窗送往 `https://api.takanekofc.com/*` 的請求，取出 Authorization header、補上需要的 Bearer 前綴後存入 Store；15 秒沒有取得值就回傳失敗。
+- `capture-token` 使用 [config.js](../src/main/api/takaneko/config.js) 的 `API_REQUEST_PATTERN` 監聽登入視窗送往 `https://api.takanekofc.com/*` 的請求，取出 Authorization header、補上需要的 Bearer 前綴後存入 Store；15 秒沒有取得值就回傳失敗。
 - `get-login-status` 只檢查本機是否有 Token，不發送遠端驗證請求。
-- `archiveEngine.json()` 使用全域 `fetch`、30 秒 timeout、HTTP `ok` 檢查，並正規化 Bearer 前綴。
-- `getAllPosts` 與 Blog 的 `httpGet()` 使用 [network.js](../src/main/utils/network.js) 的 `request()`、30 秒 timeout，直接傳入已儲存的 Authorization 值。
-- Gallery／Movie 的 `fetchJson()` 使用 `network.request()` 並正規化 Bearer；這兩個 helper 本身沒有設定 timeout。`network.js` 在 Electron 使用 `electron.net`，在 Node 測試環境使用 fetch adapter；不能把 adapter 的 timeout 當成所有 Electron 請求的保證。
+- [client.getJson()](../src/main/api/takaneko/client.js) 統一透過 [network.fetch](../src/main/utils/network.js) 請求；Electron 使用 `electron.net.fetch`，Node 測試使用全域 fetch。已移除 engine／exporter 內重複的 `json`、`httpGet`、`fetchJson` helper。
+- 請求限於設定的 API origin，拒絕其他網域與帶有帳密的 URL；ID 與可變 query 值會編碼。共用 client 補上需要的 Bearer 前綴，Gallery／Movie 保留原有 User-Agent。
+- HTTP 必須為 `200` 並能解析 JSON。HTTP 錯誤只包含狀態碼，JSON 語法錯誤使用固定訊息，不把回應內容寫進錯誤訊息。
+- 共用 timeout 預設 30 秒，涵蓋收到 headers 及讀取 JSON body；逾時中止請求並回傳 `TIMEOUT`。保留的 `handleGetPostDetails()` 批次 helper 透過 `notifications.detail(..., {timeoutMs:15000})` 維持 15 秒設定。這使原本沒有獨立 timeout 的 Gallery／Movie JSON 請求也有一致上限。
+
+回歸測試見 [takaneko-api.test.js](../tests/takaneko-api.test.js)，涵蓋九個 HTTP 端點、認證、錯誤、逾時及 engine／相容 helper 整合；分頁與媒體匯出行為另由 [official-media.test.js](../tests/official-media.test.js) 驗證。
 
 ### 媒體來源
 

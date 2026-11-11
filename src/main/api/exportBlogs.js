@@ -1,5 +1,5 @@
 // src/main/api/exportBlogs.js
-const net = require('../utils/network');
+const { blogs } = require('./takaneko');
 const { downloadToFile } = require('./downloadToFile');
 const cheerio = require('cheerio');
 const fs = require('fs').promises;
@@ -11,32 +11,6 @@ const { withVideoSlot } = require('../utils/videoQueue');
 const { undatedFilenamePrefix } = require('../utils/officialMedia');
 
 const POST_ID_FILENAME = '.post-id';
-
-/**
- * Helper: Send HTTP GET request using Electron net module
- */
-function httpGet(url, headers = {}) {
-  return new Promise((resolve, reject) => {
-    const request = net.request(url);
-    const timer = setTimeout(() => {
-      request.abort();
-      reject(new Error('Request timed out'));
-    }, 30000);
-
-    Object.entries(headers).forEach(([k, v]) => request.setHeader(k, v));
-    let data = '';
-    request.on('response', (res) => {
-      res.on('data', chunk => data += chunk.toString());
-      res.on('end', () => {
-        clearTimeout(timer);
-        if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`));
-        try { resolve(JSON.parse(data)); } catch (e) { reject(e); }
-      });
-    });
-    request.on('error', (err) => { clearTimeout(timer); reject(err); });
-    request.end();
-  });
-}
 
 /**
  * Download Vimeo videos using yt-dlp with H.265 (HEVC) preference
@@ -155,7 +129,6 @@ function parseBlogBody(htmlContent) {
  * Main export handler: Back up Manager Blogs (text, images, and H.265 videos)
  */
 async function handleBackupTopicsBlogs(token, rootPath, state, onProgress, selectedArticle = null) {
-  const headers = { Authorization: token };
   const senderName = 'マネージャーブログ';
   const senderDir = path.join(rootPath, senderName);
   const picturesDir = path.join(senderDir, 'pictures');
@@ -186,8 +159,7 @@ async function handleBackupTopicsBlogs(token, rootPath, state, onProgress, selec
   while (!selectedArticle && currentPage <= totalPages) {
     if (state && state.isCancelled) throw new Error('Process cancelled by user');
 
-    const listUrl = `https://api.takanekofc.com/blog/queries/getArticleList?blogId=topics&page=${currentPage}&categories=nuzufcwpxr5s3iip`;
-    const res = await httpGet(listUrl, headers);
+    const res = await blogs.list(token, currentPage);
 
     if (res && res.articleList) {
       allArticles.push(...res.articleList);
@@ -210,7 +182,7 @@ async function handleBackupTopicsBlogs(token, rootPath, state, onProgress, selec
 
     let detail;
     try {
-      detail = await httpGet(`https://api.takanekofc.com/blog/queries/getArticleDetail/${articleId}`, headers);
+      detail = await blogs.detail(token, articleId);
     } catch (err) {
       if (selectedArticle) throw new Error('Blog detail request failed');
       console.warn(`[Blog Backup] Failed to fetch article details (${articleId}): ${err.message}`);

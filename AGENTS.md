@@ -17,7 +17,8 @@ These instructions apply to the entire repository. This is a public source repos
 - `src/main/main.js`: application startup, login, and token capture.
 - `src/main/preload.js`: the renderer's allowlisted IPC bridge.
 - `src/main/desktopV2.js`: desktop settings, download controls, and Reader operations.
-- `src/main/downloadJob.js`, `src/main/api/`: download jobs, API access, exporters, and the archive engine.
+- `src/main/downloadJob.js`, `src/main/api/`: download jobs, exporters, and the archive engine.
+- `src/main/api/takaneko/`: Fanclub API configuration, shared JSON client, and notification/blog/gallery/movie endpoints.
 - `src/main/utils/`: network, concurrency, media tools, cookies, and download error handling.
 - `src/main/archiveActions.js`: saving posts and original media to another location.
 - `src/main/local-reader/`: archive scanning and reading; its `README.md` defines supported formats.
@@ -29,6 +30,7 @@ These instructions apply to the entire repository. This is a public source repos
 
 - Follow the existing JavaScript and CommonJS conventions. Keep changes focused and avoid unrelated formatting or dependency changes.
 - Keep filesystem access, credentials, downloads, and external tool execution in the main process. Expose renderer operations through the explicit preload allowlist and validate IPC inputs in the main process.
+- Keep Fanclub API origins, endpoint paths, and JSON requests in `src/main/api/takaneko/`. Download orchestration and exporters should call its resource modules rather than construct API URLs or duplicate request helpers.
 - Preserve pause, resume, cancellation, retry, and progress behavior when changing downloads. Write the `.post-id` completion marker only after a successful download.
 - The Reader supports completed download folders with `index.md` and `.post-id`, and app-generated saved posts with `record.json` schema v2. Consult the Reader documentation before changing these formats; legacy records and external catalogs are unsupported.
 - Reader indexing stays in memory and must not modify source files. Preserve path and symlink containment checks, missing-media handling, and clearing stale results when the source cannot be read.

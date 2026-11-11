@@ -19,7 +19,7 @@ sequenceDiagram
     U->>R: 按取得 Token
     R->>R: 停用擷取按鈕
     R->>M: invoke(capture-token)
-    M->>L: 註冊 API header 監聽並 reload
+    M->>L: 使用 takaneko/config 的篩選註冊 header 監聽並 reload
     L->>F: 網站送出登入後請求
     alt 15 秒內擷取到 Authorization
         L-->>M: onBeforeSendHeaders
@@ -34,6 +34,8 @@ sequenceDiagram
 ```
 
 UI 不取得 Token 原文，只接收擷取結果及是否已設定。畫面上的「已登入」表示 Store 有 Token；實際有效性與內容權限要等下載 API 請求才能確認。
+
+登入視窗與 IPC 仍由 `main.js` 管理；API 網域篩選統一取自 [takaneko/config.js](../src/main/api/takaneko/config.js)。後續下載透過 [takaneko 資源模組](../src/main/api/takaneko/index.js) 發送請求，renderer 不直接呼叫遠端 API；這次 API 分層不改變按鈕或 IPC 契約。
 
 ## 2. 下載、進度與重試
 
