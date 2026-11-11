@@ -1,4 +1,4 @@
-name: Validate, Build and Release
+name: Validate, Build and Release (Trigger by Tag "v*" on Main Branch)
 on:
   push:
     branches: [main]
@@ -67,7 +67,7 @@ jobs:
             dist/*.zip
             dist/*.exe
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 2
   release:
     needs: [test, build]
     if: startsWith(github.ref, 'refs/tags/v')
