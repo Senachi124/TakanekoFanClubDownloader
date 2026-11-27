@@ -19,23 +19,27 @@ sequenceDiagram
     U->>R: 按取得 Token
     R->>R: 停用擷取按鈕
     R->>M: invoke(capture-token)
-    M->>L: 使用 takaneko/config 的篩選註冊 header 監聽並 reload
-    L->>F: 網站送出登入後請求
-    alt 15 秒內擷取到 Authorization
-        L-->>M: onBeforeSendHeaders
-        M->>S: 儲存 Bearer Token
-        M->>L: 清除監聽並關閉視窗
-        M-->>R: success=true
-    else 視窗不存在、監聽錯誤或逾時
-        M-->>R: success=false 與 error
+    M->>L: 讀取更新憑證
+    alt 取得更新憑證且更新成功
+        M->>F: POST /auth/refresh
+        M->>S: 保存本次登入的兩個 Token
+        M->>L: 關閉登入視窗
+    else 改以請求標頭擷取
+        M->>L: 監聽此視窗的 API 請求並重新載入
+        alt 15 秒內取得 Authorization
+            M->>S: 保存 access token，移除舊更新憑證
+            M->>L: 關閉登入視窗
+        else 視窗關閉或逾時
+            M-->>R: success=false
+        end
     end
     R->>M: get-login-status
     R->>R: 更新狀態與按鈕
 ```
 
-UI 不取得 Token 原文，只接收擷取結果及是否已設定。畫面上的「已登入」表示 Store 有 Token；實際有效性與內容權限要等下載 API 請求才能確認。
+UI 不取得 Token 原文，只接收擷取結果及是否已設定。畫面上的「已登入」表示本機有可用的 access token 或更新憑證；實際有效性與內容權限要等下載 API 請求才能確認。
 
-登入視窗與 IPC 仍由 `main.js` 管理；API 網域篩選統一取自 [takaneko/config.js](../src/main/api/takaneko/config.js)。後續下載透過 [takaneko 資源模組](../src/main/api/takaneko/index.js) 發送請求，renderer 不直接呼叫遠端 API；這次 API 分層不改變按鈕或 IPC 契約。
+登入視窗與 IPC 仍由 `main.js` 管理；API 網域篩選統一取自 [takaneko/config.js](../src/main/api/takaneko/config.js)。後續下載透過 [takaneko 資源模組](../src/main/api/takaneko/index.js) 發送請求，renderer 不直接呼叫遠端 API；設定頁可清除 Fanclub cookies 與本機登入資料。清除時會關閉登入視窗，正在等待的擷取結果會失效。
 
 ## 2. 下載、進度與重試
 
@@ -47,11 +51,12 @@ sequenceDiagram
     participant J as downloadJob
     participant E as archiveEngine / exporters
     U->>R: 選擇內容與併發，按下載開始
+    R->>R: 鎖定開始按鈕
     R->>D: save-v2-settings
     D-->>R: 正規化設定
-    R->>R: busy(true)，啟用暫停與停止
+    R->>R: 啟用暫停與停止
     R->>D: start-download
-    alt 已有工作或沒有 Token
+    alt 已有工作、正在處理登入或缺少憑證
         D-->>R: busy 或 loginRequired
     else 可開始
         D->>D: running=true，重設 state
@@ -73,7 +78,7 @@ sequenceDiagram
 
 `job-progress` 事件由 preload 的 `onProgress()` 傳入 UI，與尚未結束的 `start-download` Promise 並行。一般成功、失敗或取消的回傳可能含完整 progress；主程序外層 catch 只回傳簡化的失敗狀態。
 
-目前 renderer 將 `completed` 顯示為完成、`cancelled` 顯示為停止，其餘 status 都顯示下載失敗，沒有為 `busy` 與 `loginRequired` 各自提供不同的結果提示。
+畫面依結果顯示完成、停止、需要重新登入、處理中或下載失敗。
 
 重試方式是再次按下載開始；會重建清單，依 Reader 索引跳過已完成項目，再處理未完成項目。先前成功檔案保留，但不是從持久化工作佇列恢復執行。
 
@@ -172,7 +177,7 @@ UI 用 `actionRunning` 阻止另一項 archive 操作同時開始。主程序不
 | 更改下載位置 | `download-folder-select` 在對話框前後都檢查 `running` → `realpath` 與可寫檢查 → 儲存設定、使相關 Reader 重新初始化；不搬移既有檔案 |
 | 更改瀏覽來源 | `reader-select` → 原生選擇 → 保存 `readerRoot` 並掃描 → UI 重設 offset/serial、更新資料夾文字；目前 handler 不立即呼叫 `load()` 重畫列表，後續進入集合頁、手動或定時更新才查詢新來源 |
 | 切換語言 | [UI.init](../src/shared/ui.js) 保存 `localStorage.language`，翻譯 UI 並送出 `languagechange`；renderer 重畫進度、詳情時間與目前集合，內容本身不翻譯 |
-| 時間呈現 | `UI.publicationTime()` → `UI.date()`，兩種語言都使用 JST／24 小時制，未知日期維持未知 |
+| 時間呈現 | `UI.publicationTime()` → `UI.date()`，三種語言都使用 JST／24 小時制，未知日期維持未知 |
 
 ### YouTube cookies
 

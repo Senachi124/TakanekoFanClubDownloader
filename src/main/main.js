@@ -2,7 +2,9 @@ const { app, BrowserWindow, ipcMain, shell, dialog, session, protocol } = requir
 const path = require('path');
 const Store = require('electron-store');
 const packageInfo = require('../../package.json');
-const { API_REQUEST_PATTERN } = require('./api/takaneko/config');
+const { API_ORIGIN, SITE_ORIGIN, API_REQUEST_PATTERN } = require('./api/takaneko/config');
+const { refreshCredentials } = require('./api/takaneko/auth');
+const { replaceCredentials } = require('./utils/fanclubAuth');
 
 protocol.registerSchemesAsPrivileged([{scheme:'archive',privileges:{standard:true,secure:true,supportFetchAPI:true,stream:true}}]);
 const store = new Store();
@@ -20,6 +22,9 @@ const exportState = {
 
 let mainWindow;
 let loginWindow;
+let capturingWindow;
+let clearingLogin = false;
+const loginBusy = () => clearingLogin || !!capturingWindow;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -32,7 +37,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js')
     },
     titleBarStyle: 'hiddenInset',
-    backgroundColor: '#1a1a2e'
+    backgroundColor: '#1E1E2E'
   });
 
   mainWindow.setTitle(`${APP_NAME} v${packageInfo.version}`);
@@ -42,7 +47,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  require('./desktopV2').setup({store,state:exportState,getWindow:()=>mainWindow});
+  require('./desktopV2').setup({store,state:exportState,getWindow:()=>mainWindow,loginBusy});
   createWindow();
 
   app.on('activate', () => {
@@ -73,7 +78,8 @@ ipcMain.handle('get-app-info', () => ({
 
 // Save token
 ipcMain.handle('save-token', (event, token) => {
-  store.set('token', token);
+  if (exportState.running || loginBusy() || typeof token !== 'string') return false;
+  replaceCredentials(store, token.trim() ? { token: token.trim() } : null);
   return true;
 });
 
@@ -94,7 +100,12 @@ ipcMain.handle('save-download-settings', (event, value) => {
 
 // Open login window for token capture
 ipcMain.handle('open-login', async () => {
-  loginWindow = new BrowserWindow({
+  if (clearingLogin || exportState.running) return { success: false };
+  if (loginWindow && !loginWindow.isDestroyed()) {
+    loginWindow.focus();
+    return { success: true };
+  }
+  const win = new BrowserWindow({
     width: 1000,
     height: 800,
     webPreferences: {
@@ -106,89 +117,110 @@ ipcMain.handle('open-login', async () => {
     title: `Login to ${APP_NAME}`
   });
 
-  loginWindow.loadURL('https://takanekofc.com/#/login');
+  loginWindow = win;
+  win.loadURL(`${SITE_ORIGIN}/login`);
 
-  loginWindow.on('closed', () => {
-    loginWindow = null;
+  win.on('closed', () => {
+    if (capturingWindow === win) capturingWindow = null;
+    if (loginWindow === win) loginWindow = null;
   });
 
   return { success: true };
 });
 
-// Capture token from logged-in session
-ipcMain.handle('capture-token', async () => {
-  if (!loginWindow || loginWindow.isDestroyed()) {
-    return { success: false, error: 'Login window not found.' };
-  }
+const LOGIN_ORIGINS = [SITE_ORIGIN, API_ORIGIN];
 
-  return new Promise((resolve) => {
-    let isResolved = false; // Prevent duplicate resolve
-    const filter = { urls: [API_REQUEST_PATTERN] };
+function cookieMatchesLogin(cookie) {
+  const domain = String(cookie.domain || '').replace(/^\./, '').toLowerCase();
+  return domain === 'takanekofc.com' || domain.endsWith('.takanekofc.com');
+}
 
-    // 1. Define success handler
-    const handleSuccess = (token) => {
-      if (isResolved) return;
-      isResolved = true;
+function cookieUrl(cookie) {
+  const host = String(cookie.domain || '').replace(/^\./, '');
+  const protocol = cookie.secure ? 'https:' : 'http:';
+  return `${protocol}//${host}${cookie.path || '/'}`;
+}
 
-      // Clean up interceptor
-      loginWindow.webContents.session.webRequest.onBeforeSendHeaders(filter, null);
-
-      // Format token
-      const bearerToken = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-      store.set('token', bearerToken);
-
-      console.log('✅ Token captured successfully!');
-
-      loginWindow.close();
-      resolve({ success: true });
-    };
-
-    // 2. Define failure/timeout handler
-    const handleFailure = (errorMsg) => {
-      if (isResolved) return;
-      isResolved = true;
-
-      // Clean up interceptor (if window still exists)
-      if (loginWindow && !loginWindow.isDestroyed()) {
-        loginWindow.webContents.session.webRequest.onBeforeSendHeaders(filter, null);
-      }
-
-      console.log('❌ Token capture failed:', errorMsg);
-      resolve({ success: false, error: errorMsg });
-    };
-
-    // 3. Set up interceptor
-    try {
-      loginWindow.webContents.session.webRequest.onBeforeSendHeaders(filter, (details, callback) => {
-        const headers = details.requestHeaders;
-        // Check Authorization (case-insensitive)
-        const token = headers['Authorization'] || headers['authorization'];
-
-        if (token) {
-          handleSuccess(token);
-        }
-
-        // Continue request
-        callback({ cancel: false, requestHeaders: details.requestHeaders });
-      });
-    } catch (e) {
-      handleFailure(`Interceptor error: ${e.message}`);
-      return;
+// Drop the embedded Fanclub session and the saved API tokens without touching YouTube cookies.
+ipcMain.handle('clear-login-cookies', async () => {
+  if (exportState.running || clearingLogin) return { success: false };
+  clearingLogin = true;
+  try {
+    const browserSession = session.defaultSession;
+    if (loginWindow && !loginWindow.isDestroyed()) loginWindow.destroy();
+    capturingWindow = null;
+    replaceCredentials(store, null);
+    const cookies = (await browserSession.cookies.get({})).filter(cookieMatchesLogin);
+    for (const cookie of cookies) {
+      await browserSession.cookies.remove(cookieUrl(cookie), cookie.name);
     }
+    for (const origin of LOGIN_ORIGINS) {
+      await browserSession.clearStorageData({
+        origin, storages: ['localstorage', 'indexdb', 'serviceworkers', 'cachestorage']
+      });
+    }
+    return { success: true, removed: cookies.length };
+  } finally {
+    clearingLogin = false;
+  }
+});
 
-    // 4. Reload the page! This is the key step
-    // This forces the website to re-execute initialization code and send authenticated requests
-    console.log('🔄 Reloading page to trigger authentication request...');
-    loginWindow.reload();
-
-    // 5. Set 15-second timeout protection
-    // If user is not logged in or network is slow, don't hang forever
-    setTimeout(() => {
-      if (!isResolved) {
-        handleFailure('Timeout: Token not detected after 15 seconds. Please ensure you are logged in.');
-      }
-    }, 15000);
+function captureRequestToken(win) {
+  const contents = win.webContents;
+  const windowId = contents.id;
+  const requests = contents.session.webRequest;
+  const filter = { urls: [API_REQUEST_PATTERN] };
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => finish(), 15000);
+    const onClosed = () => finish();
+    function finish(token) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      win.removeListener('closed', onClosed);
+      requests.onBeforeSendHeaders(filter, null);
+      if (token) resolve(/^Bearer /i.test(token) ? token : `Bearer ${token}`);
+      else reject(new Error('Login capture ended'));
+    }
+    win.once('closed', onClosed);
+    try {
+      requests.onBeforeSendHeaders(filter, (details, callback) => {
+        const token = details.requestHeaders.Authorization || details.requestHeaders.authorization;
+        callback({ cancel: false, requestHeaders: details.requestHeaders });
+        if (details.webContentsId === windowId && typeof token === 'string' && token.trim()) finish(token.trim());
+      });
+      win.reload();
+    } catch {
+      finish();
+    }
   });
+}
+
+ipcMain.handle('capture-token', async () => {
+  const win = loginWindow;
+  if (!win || win.isDestroyed() || loginBusy() || exportState.running) return { success: false };
+  capturingWindow = win;
+  try {
+    // Read before reload because a non-persistent login can lose its stored token on unload.
+    const storedRefresh = await win.webContents.executeJavaScript(
+      `location.origin === ${JSON.stringify(SITE_ORIGIN)} && (localStorage.getItem('refreshToken') || sessionStorage.getItem('refreshToken'))`
+    ).catch(() => null);
+    let credentials;
+    if (typeof storedRefresh === 'string' && storedRefresh.trim() && !win.isDestroyed()) {
+      credentials = await refreshCredentials(storedRefresh.trim()).catch(() => null);
+    }
+    if (win.isDestroyed() || win !== loginWindow) return { success: false };
+    if (!credentials) credentials = { token: await captureRequestToken(win) };
+    if (win.isDestroyed() || win !== loginWindow) return { success: false };
+    replaceCredentials(store, credentials);
+    win.close();
+    return { success: true };
+  } catch {
+    return { success: false };
+  } finally {
+    if (capturingWindow === win) capturingWindow = null;
+  }
 });
 
 // Open exported folder

@@ -10,6 +10,7 @@ Fanclub API 集中在 [`src/main/api/takaneko/`](../src/main/api/takaneko/)。en
 src/main/api/takaneko/
   config.js         API origin、登入監聽 pattern、固定分類與媒體 API header
   client.js         getJson：網域檢查、Bearer、逾時與 HTTP/JSON 錯誤
+  auth.js           refreshCredentials：更新登入憑證
   notifications.js  count / list / listAll / detail
   blogs.js          list / detail
   gallery.js        list / detail
@@ -27,18 +28,18 @@ flowchart LR
     Network --> API[Fanclub API]
 ```
 
-資源方法的第一個參數是 Token。`list(token, page=1)` 回傳上游分頁物件；`detail(token, id)` 回傳詳情物件。通知的 `list(token, limit)` 使用總量而非頁數；`listAll(token)` 封裝總數查詢及陣列／`items`／`data` 格式相容處理。其餘清單的分頁迴圈仍由 engine 或 exporter 控制。
+資源方法的第一個參數是 Token。`list(token, page=1)` 回傳上游分頁物件；`detail(token, id)` 回傳詳情物件。通知的 `list(token, limit, offset=0)` 按位移分頁。`listAll(token)` 封裝總數查詢及陣列／`items`／`data` 格式相容處理。其餘清單的分頁迴圈仍由 engine 或 exporter 控制。
 
 新增端點時，在對應資源檔組合路徑與 query，透過 `client.getJson()` 請求，再由呼叫端處理業務流程。不要在 exporter 重建 API 網域、Bearer 或 JSON request helper。既有 [getAllPosts.js](../src/main/api/getAllPosts.js) 只保留 `handleGetAllPosts()` 相容入口，委派給 `notifications.listAll()`。
 
 ## Fanclub HTTP 端點
 
-API base URL 為 `https://api.takanekofc.com`。下列請求皆為 `GET`，需要使用者具有相應存取權限的 `Authorization: Bearer <TOKEN>`。登入視窗載入的是 `https://takanekofc.com/#/login`，不是由本程式另行實作帳密登入 API。
+API base URL 為 `https://api.takanekofc.com`。下表的內容請求皆為 `GET`，需要使用者具有相應存取權限的 `Authorization: Bearer <TOKEN>`。登入視窗載入的是 `https://takanekofc.com/login`，不是由本程式另行實作帳密登入 API。
 
 | 用途 | 相對路徑與 query | 程式使用的回傳欄位 | 端點管理位置 |
 | --- | --- | --- | --- |
-| 通知總數 | `/auth/notifications/count` | `count` 或 `total`；未取得 truthy 值時使用 1000 | [notifications.count](../src/main/api/takaneko/notifications.js) |
-| 通知清單 | `/auth/notifications?offset=0&limit={count}&orderType=2&readType=all` | 陣列本身，或 `items`／`data`；每項的 `notificationReservationId`、`title`／`subject` | [notifications.list / listAll](../src/main/api/takaneko/notifications.js) |
+| 通知總數 | `/auth/notifications/count?notificationType=message` | `count` 或 `total` | [notifications.count](../src/main/api/takaneko/notifications.js) |
+| 通知清單 | `/auth/notifications?notificationType=message&offset={offset}&limit=50&orderType=2&readType=all` | 陣列本身，或 `items`／`data`；每項的 `notificationReservationId`、`title`／`subject` | [notifications.list / listAll](../src/main/api/takaneko/notifications.js) |
 | 單篇通知詳情 | `/auth/notifications/{id}` | `title`／`subject`、`sendingOfficialUserId`、`body*`、`image*`、文字與日期欄位 | [notifications.detail](../src/main/api/takaneko/notifications.js) |
 | 經理人部落格清單 | `/blog/queries/getArticleList?blogId=topics&page={page}&categories={categoryId}` | `articleList`、`totalPages`；每項的 `id`、`title` | [blogs.list](../src/main/api/takaneko/blogs.js) |
 | 部落格詳情 | `/blog/queries/getArticleDetail/{id}` | `title`、`body`、`thumbnail`、`displayDate`／`createdAt` | [blogs.detail](../src/main/api/takaneko/blogs.js) |
@@ -47,18 +48,18 @@ API base URL 為 `https://api.takanekofc.com`。下列請求皆為 `GET`，需�
 | Movies 清單 | `/movie/queries/getMovieList?page={page}&pageSize=20` | `movieList`、`totalPages` | [movies.list](../src/main/api/takaneko/movies.js) |
 | Movie 詳情 | `/movie/queries/getMovieDetail/{id}` | `movieType`、`videoId`、`thumbnail`、`title`、`description`、日期欄位 | [movies.detail](../src/main/api/takaneko/movies.js) |
 
-`categoryId` 使用程式中固定的經理人部落格分類值，並非 UI 可設定項目。Blog／Gallery／Movie 清單從第 1 頁讀到 `totalPages`，缺少頁數時採 1；通知清單則先查總數，再以一次 `offset=0` 請求取得資料，沒有逐頁迴圈。通知清單未限定 `notificationType=message`。
+`categoryId` 使用程式中固定的經理人部落格分類值，並非 UI 可設定項目。Blog／Gallery／Movie 清單從第 1 頁讀到 `totalPages`，缺少頁數時採 1；通知清單每頁 50 筆。總數查詢回傳 403 或沒有提供總數時，讀到不足一頁為止。重複的完整頁面會回報錯誤。
 
 ### 驗證與網路路徑
 
-- `capture-token` 使用 [config.js](../src/main/api/takaneko/config.js) 的 `API_REQUEST_PATTERN` 監聽登入視窗送往 `https://api.takanekofc.com/*` 的請求，取出 Authorization header、補上需要的 Bearer 前綴後存入 Store；15 秒沒有取得值就回傳失敗。
-- `get-login-status` 只檢查本機是否有 Token，不發送遠端驗證請求。
+- `capture-token` 先從 Fanclub 登入視窗取得更新憑證，交由 [auth.js](../src/main/api/takaneko/auth.js) 對 `/auth/refresh` 發送 JSON POST。成功時一併保存 access token 與 refresh token。若無法更新，改為監聽該視窗的 Fanclub API 請求並重新載入，最多等待 15 秒。備援擷取成功時會移除舊帳號的更新憑證。
+- `get-login-status` 檢查本機 access token 或更新憑證。桌面工作每次內容 API 請求前檢查 JWT 的到期時間，提前 30 秒更新。收到 HTTP 401 時可更新憑證並重送該請求一次。
 - [client.getJson()](../src/main/api/takaneko/client.js) 統一透過 [network.fetch](../src/main/utils/network.js) 請求；Electron 使用 `electron.net.fetch`，Node 測試使用全域 fetch。已移除 engine／exporter 內重複的 `json`、`httpGet`、`fetchJson` helper。
 - 請求限於設定的 API origin，拒絕其他網域與帶有帳密的 URL；ID 與可變 query 值會編碼。共用 client 補上需要的 Bearer 前綴，Gallery／Movie 保留原有 User-Agent。
 - HTTP 必須為 `200` 並能解析 JSON。HTTP 錯誤只包含狀態碼，JSON 語法錯誤使用固定訊息，不把回應內容寫進錯誤訊息。
 - 共用 timeout 預設 30 秒，涵蓋收到 headers 及讀取 JSON body；逾時中止請求並回傳 `TIMEOUT`。保留的 `handleGetPostDetails()` 批次 helper 透過 `notifications.detail(..., {timeoutMs:15000})` 維持 15 秒設定。這使原本沒有獨立 timeout 的 Gallery／Movie JSON 請求也有一致上限。
 
-回歸測試見 [takaneko-api.test.js](../tests/takaneko-api.test.js)，涵蓋九個 HTTP 端點、認證、錯誤、逾時及 engine／相容 helper 整合；分頁與媒體匯出行為另由 [official-media.test.js](../tests/official-media.test.js) 驗證。
+回歸測試見 [takaneko-api.test.js](../tests/takaneko-api.test.js)，涵蓋內容 HTTP 端點、認證、錯誤、逾時及 engine／相容 helper 整合；分頁與媒體匯出行為另由 [official-media.test.js](../tests/official-media.test.js) 驗證。
 
 ### 媒體來源
 
@@ -82,9 +83,10 @@ Movie 使用最高畫質選擇與 MP4 remux，與投稿／Blog 的轉碼參數�
 | Channel | 引數 | 回傳／效果 |
 | --- | --- | --- |
 | `get-app-info` | 無 | `{name, version}` |
-| `get-login-status` | 無 | 是否已儲存 Token 的 boolean |
-| `open-login` | 無 | 建立 Fanclub 登入視窗；`{success:true}` |
-| `capture-token` | 無 | 成功 `{success:true}`；失敗 `{success:false,error}`；成功後關閉登入視窗 |
+| `get-login-status` | 無 | 本機是否有可用的 access token 或更新憑證 |
+| `open-login` | 無 | 開啟或聚焦 Fanclub 登入視窗，清除登入或下載期間回傳 `{success:false}` |
+| `clear-login-cookies` | 無 | 關閉登入視窗並清除 Fanclub 登入資料，回傳 `{success:true,removed}`。工作進行中回傳 `{success:false}` |
+| `capture-token` | 無 | 成功 `{success:true}`；失敗 `{success:false}`；成功後關閉登入視窗 |
 | `get-download-settings` | 無 | `{concurrency, blogs, gallery, movies, needsMigration}` |
 | `save-v2-settings` | `{concurrency, blogs, gallery, movies}` | 儲存並回傳正規化設定；併發範圍 1–100，無效數值預設 5 |
 | `get-folder-settings` | 無 | `{downloadRoot, readerRoot}`，包含預設路徑解析結果 |
@@ -99,7 +101,7 @@ Movie 使用最高畫質選擇與 MP4 remux，與投稿／Blog 的轉碼參數�
 
 | Channel | 引數 | 回傳／效果 |
 | --- | --- | --- |
-| `start-download` | 無；從 Store 讀取設定 | 已有工作：`{success:false,status:'busy'}`；沒有 Token：`loginRequired`；正常結束：`{success,status,progress}`，status 為 `completed`／`failed`／`cancelled`；外層例外：`{success:false,status:'failed'}` |
+| `start-download` | 無；從 Store 讀取設定 | 已有工作或正在處理登入：`{success:false,status:'busy'}`；沒有 Token：`loginRequired`；正常結束：`{success,status,progress}`，status 為 `completed`／`failed`／`cancelled`／`loginRequired`；外層例外：`{success:false,status:'failed'}` |
 | `control-pause` | 無 | 設定 `state.isPaused=true`，回傳 `true` |
 | `control-resume` | 無 | 設定 `state.isPaused=false`，回傳 `true` |
 | `control-cancel` | 無 | 設定取消並清除暫停旗標，回傳 `true` |

@@ -14,8 +14,22 @@ const collectionViews=['browse','media','reader'];
 function indexingState(delta){indexing+=delta;const active=indexing>0;$('scanProgress').hidden=!active;$('collection').setAttribute('aria-busy',String(active));$('posts').setAttribute('aria-busy',String(active));$('refresh').disabled=$('choose').disabled=active;}
 const readerMode=()=>'reader';
 function notice(text){$('notice').hidden=!text;$('notice').textContent=text;}
-async function loginStatus(){const yes=await api('get-login-status');$('loginStatus').textContent=yes?'已登入':'尚未登入';$('start').disabled=running||!yes;}
-function busy(active){running=active;$('start').disabled=active;$('pause').disabled=$('stop').disabled=!active;}
+let signedIn=false, capturing=false, clearing=false, captureSerial=0;
+function syncLoginControls() {
+  $('start').disabled=running || !signedIn || capturing || clearing;
+  $('login').disabled=$('capture').disabled=running || capturing || clearing;
+  $('clearCookies').disabled=running || clearing;
+}
+async function loginStatus() {
+  signedIn=await api('get-login-status');
+  $('loginStatus').textContent=signedIn?'已登入':'尚未登入';
+  syncLoginControls();
+}
+function busy(active) {
+  running=active;
+  $('pause').disabled=$('stop').disabled=!active;
+  syncLoginControls();
+}
 async function save(){const value={concurrency:Number($('concurrency').value),blogs:$('blogs').checked,gallery:$('gallery').checked,movies:$('movies').checked};const saved=await api('save-v2-settings',value);$('concurrency').value=saved.concurrency;}
 async function load(scan=false){
   const request=++serial,mode=readerMode();indexingState(1);
@@ -81,9 +95,42 @@ async function folderSettings(){const settings=await api('get-folder-settings');
 $('chooseDownload').onclick=async()=>{try{const result=await api('download-folder-select');await folderSettings();notice(result.error?actionMessage(result):result.cancelled?'':'設定已儲存');}catch{notice('無法讀取資料夾');}};
 $('savePost').onclick=()=>archiveAction('save-post',detailKey,$('savePost'));
 $('revealPost').onclick=()=>archiveAction('reveal-post',detailKey,$('revealPost'));
-$('login').onclick=()=>api('open-login');$('capture').onclick=async()=>{$('capture').disabled=true;notice('處理中');try{const result=await api('capture-token');notice(result.success?'已登入':'需要重新登入或重試');await loginStatus();}finally{$('capture').disabled=false;}};
+$('login').onclick=()=>api('open-login');
+$('capture').onclick=async()=>{
+  const request=++captureSerial;
+  capturing=true;syncLoginControls();notice('處理中');
+  try {
+    const result=await api('capture-token');
+    if(request===captureSerial) notice(result.success?'已登入':'需要重新登入或重試');
+  } catch { if(request===captureSerial) notice('需要重新登入或重試'); }
+  finally {
+    if(request===captureSerial) capturing=false;
+    await loginStatus();
+  }
+};
+$('clearCookies').onclick=async()=>{
+  captureSerial++;capturing=false;clearing=true;syncLoginControls();notice('處理中');
+  try {
+    const result=await api('clear-login-cookies');
+    notice(result?.success?'已清除登入 Cookies 同已儲存嘅登入資料。請再開登入視窗，重新登入。':'未能清除登入 Cookies，請再試一次。');
+  } catch { notice('未能清除登入 Cookies，請再試一次。'); }
+  finally { clearing=false;await loginStatus(); }
+};
 $('settingsForm').onsubmit=async event=>{event.preventDefault();await save();notice('設定已儲存');};
-$('start').onclick=async()=>{await save();busy(true);paused=false;$('pause').textContent='暫停';notice('處理中');try{const result=await api('start-download');notice(result.status==='completed'?'已完成':result.status==='cancelled'?'已停止':'下載失敗');}finally{busy(false);await loginStatus();}};
+$('start').onclick=async()=>{
+  if (running) return;
+  busy(true);
+  $('pause').disabled=$('stop').disabled=true;
+  paused=false;$('pause').textContent='暫停';notice('處理中');
+  try {
+    await save();
+    $('pause').disabled=$('stop').disabled=false;
+    const result=await api('start-download');
+    const messages={completed:'已完成',cancelled:'已停止',loginRequired:'需要重新登入或重試',busy:'處理中'};
+    notice(messages[result.status] || '下載失敗');
+  } catch { notice('下載失敗'); }
+  finally { busy(false);await loginStatus(); }
+};
 $('pause').onclick=async()=>{paused=!paused;await api(paused?'control-pause':'control-resume');$('pause').textContent=paused?'繼續':'暫停';};$('stop').onclick=()=>api('control-cancel');$('folder').onclick=()=>api('open-exported-folder');
 $('choose').onclick=async()=>{indexingState(1);try{const result=await api('reader-select');if(result){offset=0;serial++;await folderSettings();notice('設定已儲存');}}catch{notice('無法讀取資料夾');}finally{indexingState(-1);}};$('refresh').onclick=()=>load(true).catch(()=>notice('無法讀取資料夾'));
 for(const id of ['member','kind','mode'])$(id).onchange=()=>{offset=0;load();};$('previous').onclick=()=>{offset=Math.max(0,offset-48);load();};$('next').onclick=()=>{offset+=48;load();};

@@ -17,8 +17,9 @@ test('Fanclub resources route all endpoints with encoded IDs, queries and one Be
   try {
     const id = 'example/id?part=2#fragment';
     const cases = [
-      [() => notifications.count('fixture'), '/auth/notifications/count', {}],
-      [() => notifications.list('Bearer fixture', 42), '/auth/notifications', { offset: '0', limit: '42', orderType: '2', readType: 'all' }],
+      [() => notifications.count('fixture'), '/auth/notifications/count', { notificationType: 'message' }],
+      [() => notifications.list('Bearer fixture', 42), '/auth/notifications', { notificationType: 'message', offset: '0', limit: '42', orderType: '2', readType: 'all' }],
+      [() => notifications.list('Bearer fixture', 50, 50), '/auth/notifications', { notificationType: 'message', offset: '50', limit: '50', orderType: '2', readType: 'all' }],
       [() => notifications.detail('fixture', id), '/auth/notifications/' + encodeURIComponent(id), {}],
       [() => blogs.list('Bearer fixture', 3), '/blog/queries/getArticleList', { blogId: 'topics', page: '3', categories: 'nuzufcwpxr5s3iip' }],
       [() => blogs.detail('fixture', id), '/blog/queries/getArticleDetail/' + encodeURIComponent(id), {}],
@@ -35,6 +36,8 @@ test('Fanclub resources route all endpoints with encoded IDs, queries and one Be
       assert.deepEqual(Object.fromEntries(url.searchParams), query);
       assert.equal(url.hash, '');
       assert.equal(options.headers.Authorization, 'Bearer fixture');
+      assert.equal(options.headers.Origin, 'https://takanekofc.com');
+      assert.equal(options.headers.Referer, 'https://takanekofc.com/');
       assert.ok(options.headers.Accept.includes('application/json'));
       assert.equal(options.signal.aborted, false);
       if (/gallery|movie/.test(pathname)) assert.ok(options.headers['User-Agent']);
@@ -43,25 +46,40 @@ test('Fanclub resources route all endpoints with encoded IDs, queries and one Be
   } finally { global.fetch = previous; }
 });
 
-test('notification listing preserves count fallbacks and array/items/data envelopes', async () => {
+test('notification listing paginates with notificationType=message and handles count fallbacks and envelopes', async () => {
   const previous = global.fetch;
   const post = { notificationReservationId: 'example-post' };
   try {
-    for (const [totals, envelope, limit] of [
-      [{ count: 2 }, [post], '2'],
-      [{ total: 7 }, { items: [post] }, '7'],
-      [{}, { data: [post] }, '1000'],
-      [{ count: 0 }, {}, '1000']
+    for (const [totals, envelope] of [
+      [{ count: 2 }, [post]],
+      [{ total: 7 }, { items: [post] }],
+      [{}, { data: [post] }],
+      [{ count: 0 }, {}]
     ]) {
       global.fetch = async url => {
         const target = new URL(url);
+        assert.equal(target.searchParams.get('notificationType'), 'message');
         if (target.pathname.endsWith('/count')) return Response.json(totals);
-        assert.equal(target.searchParams.get('limit'), limit);
-        assert.equal(target.searchParams.has('notificationType'), false);
+        assert.equal(target.searchParams.get('limit'), '50');
+        assert.equal(target.searchParams.get('offset'), '0');
         return Response.json(envelope);
       };
       assert.deepEqual(await notifications.listAll('fixture'), Object.keys(envelope).length ? [post] : []);
     }
+
+    // Multi-page pagination check
+    const offsets = [];
+    global.fetch = async url => {
+      const target = new URL(url);
+      if (target.pathname.endsWith('/count')) return Response.json({ count: 75 });
+      const offset = Number(target.searchParams.get('offset'));
+      offsets.push(offset);
+      const size = offset === 0 ? 50 : 25;
+      return Response.json(Array.from({ length: size }, (_, i) => ({ notificationReservationId: `post-${offset + i}` })));
+    };
+    const paged = await notifications.listAll('fixture');
+    assert.equal(paged.length, 75);
+    assert.deepEqual(offsets, [0, 50]);
   } finally { global.fetch = previous; }
 });
 
@@ -127,4 +145,26 @@ test('engine and legacy notification helpers use the resource layer without chan
     global.fetch = previous;
     await fs.rm(root, { recursive: true, force: true });
   }
+});
+
+test('listing continues beyond 50,000 and propagates count service errors', async t => {
+  const total = 50_001;
+  const counts = t.mock.method(global, 'fetch', async raw => {
+    const url = new URL(raw);
+    if (url.pathname.endsWith('/count')) return Response.json({ count: total });
+    const offset = Number(url.searchParams.get('offset'));
+    return Response.json(Array.from({ length: Math.min(50, total-offset) }, (_,i) => ({ notificationReservationId: String(offset+i) })));
+  });
+  assert.equal((await notifications.listAll('fixture')).length, total);
+  counts.mock.resetCalls();
+  counts.mock.mockImplementation(async () => new Response(null, { status: 503 }));
+  await assert.rejects(notifications.listAll('fixture'), { status: 503 });
+  assert.equal(counts.mock.callCount(), 1);
+});
+
+test('an unknown total and a repeated full page report a listing error', async t => {
+  const page = Array.from({length:50}, (_,i) => ({ notificationReservationId: String(i) }));
+  t.mock.method(global, 'fetch', async raw => new URL(raw).pathname.endsWith('/count')
+    ? new Response(null, { status: 403 }) : Response.json(page));
+  await assert.rejects(notifications.listAll('fixture'), /Repeated notification page/);
 });

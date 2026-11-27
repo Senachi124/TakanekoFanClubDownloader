@@ -184,6 +184,7 @@ async function handleBackupTopicsBlogs(token, rootPath, state, onProgress, selec
     try {
       detail = await blogs.detail(token, articleId);
     } catch (err) {
+      if (err.code === 'LOGIN_REQUIRED') throw err;
       if (selectedArticle) throw new Error('Blog detail request failed');
       console.warn(`[Blog Backup] Failed to fetch article details (${articleId}): ${err.message}`);
       continue;

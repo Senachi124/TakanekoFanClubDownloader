@@ -7,4 +7,9 @@ function normalizeConcurrency(value) {
   return Math.min(Math.max(parsed, 1), MAX_CONCURRENCY);
 }
 
-module.exports = { DEFAULT_CONCURRENCY, MAX_CONCURRENCY, normalizeConcurrency };
+async function waitForDownload(state) {
+  while (state.isPaused && !state.isCancelled) await new Promise(resolve => setTimeout(resolve, 200));
+  return !state.isCancelled;
+}
+
+module.exports = { DEFAULT_CONCURRENCY, MAX_CONCURRENCY, normalizeConcurrency, waitForDownload };

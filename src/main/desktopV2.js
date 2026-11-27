@@ -6,17 +6,17 @@ const {ArchiveReader} = require('./local-reader');
 const {downloadJob} = require('./downloadJob');
 const {normalizeConcurrency} = require('./utils/concurrency');
 const {saveMedia,savePost}=require('./archiveActions');
-function setup({store,state,getWindow}) {
+const {hasUsableCredentials,ensureFreshToken}=require('./utils/fanclubAuth');
+function setup({store,state,getWindow,loginBusy=()=>false}) {
   const readers = {local:new ArchiveReader(),reader:new ArchiveReader()};
   const ready = {};
   const exported=()=>store.get('downloadRoot') || path.join(app.getPath('userData'),'exported');
-  let running=false;
   async function getReader(mode) {
     mode=mode==='reader'?'reader':'local';
     if(!ready[mode]) ready[mode]=readers[mode].select(mode==='reader'?(store.get('readerRoot') || exported()):exported());
     await ready[mode]; return readers[mode];
   }
-  ipcMain.handle('get-login-status',()=>!!store.get('token'));
+  ipcMain.handle('get-login-status',()=>hasUsableCredentials(store));
   ipcMain.handle('youtube-cookies',(_event,value)=>{
     const cookies=require('./utils/youtubeCookies');
     if(!value) return cookies.status();
@@ -48,10 +48,10 @@ function setup({store,state,getWindow}) {
   });
   ipcMain.handle('get-folder-settings',()=>({downloadRoot:exported(),readerRoot:store.get('readerRoot') || exported()}));
   ipcMain.handle('download-folder-select',async()=>{
-    if(running)return {error:'LOCATION_BUSY'};
+    if(state.running)return {error:'LOCATION_BUSY'};
     const selection=await dialog.showOpenDialog(getWindow(),{defaultPath:exported(),properties:['openDirectory','createDirectory']});
     if(selection.canceled)return {cancelled:true};
-    if(running)return {error:'LOCATION_BUSY'};
+    if(state.running)return {error:'LOCATION_BUSY'};
     const root=await fs.promises.realpath(selection.filePaths[0]);
     await fs.promises.access(root,fs.constants.W_OK);
     store.set('downloadRoot',root);delete ready.local;
@@ -82,17 +82,17 @@ function setup({store,state,getWindow}) {
   ipcMain.handle('reader-query',async(_e,mode,options)=>(await getReader(mode)).query(options));
   ipcMain.handle('reader-detail',async(_e,mode,key)=>(await getReader(mode)).detail(key));
   ipcMain.handle('start-download',async()=>{
-    if(running) return {success:false,status:'busy'};
-    const token=store.get('token');if(!token) return {success:false,status:'loginRequired'};
-    running=true;state.isPaused=false;state.isCancelled=false;let errorsSaved=-1;
+    if(state.running || loginBusy()) return {success:false,status:'busy'};
+    if(!hasUsableCredentials(store)) return {success:false,status:'loginRequired'};
+    state.running=true;state.isPaused=false;state.isCancelled=false;let errorsSaved=-1;
     try {
       const directory=exported();
-      const result=await downloadJob({token,directory,settings:{blogs:true,gallery:true,movies:true,...store.get('v2Settings',{}),concurrency:store.get('downloadConcurrency',5)},state,emit:p=>{
+      const result=await downloadJob({token:store.get('token'),getToken:rejectedToken=>ensureFreshToken(store,{rejectedToken}),directory,settings:{blogs:true,gallery:true,movies:true,...store.get('v2Settings',{}),concurrency:store.get('downloadConcurrency',5)},state,emit:p=>{
         if(errorsSaved!==(p.errors || []).length){store.set('downloadErrors',p.errors || []);errorsSaved=(p.errors || []).length;}
         if(!getWindow().isDestroyed())getWindow().webContents.send('job-progress',p);
       }});
       ready.local=readers.local.select(directory);if(!store.get('readerRoot'))delete ready.reader;return result;
-    } catch {return {success:false,status:'failed'};} finally {running=false;}
+    } catch {return {success:false,status:'failed'};} finally {state.running=false;}
   });
   protocol.handle('archive',async request=>{
     try {
