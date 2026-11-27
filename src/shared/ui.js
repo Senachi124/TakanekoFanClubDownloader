@@ -100,7 +100,7 @@
     summary.textContent=`失敗詳情 (${values.length})`;details.append(summary);details.open=true;
     const list=document.createElement('ul');
     const stages={list:'取得清單',details:'檢查／取得詳情',cover:'封面',video:'影片',save:'下載／保存檔案',download:'下載工作'};
-    const codes={MOVIE_TYPE_UNSUPPORTED:'影片類型不支援',VIDEO_ID_INVALID:'影片 ID 格式錯誤',VIDEO_ID_MISSING:'缺少影片 ID',HTTPS_REQUIRED:'需要 HTTPS',MEDIA_TOOL_NOT_FOUND:'找不到影片工具',MEDIA_TOOL_FAILED:'影片工具執行失敗',MEDIA_ACCESS_DENIED:'影片存取受限',NETWORK_ERROR:'網絡錯誤',TIMEOUT:'連線逾時',FILE_IO_ERROR:'檔案讀寫失敗',EMPTY_MEDIA:'影片檔案為空',DOWNLOAD_FAILED:'下載失敗'};
+    const codes={LOGIN_REQUIRED:'需要重新登入或重試',MOVIE_TYPE_UNSUPPORTED:'影片類型不支援',VIDEO_ID_INVALID:'影片 ID 格式錯誤',VIDEO_ID_MISSING:'缺少影片 ID',HTTPS_REQUIRED:'需要 HTTPS',MEDIA_TOOL_NOT_FOUND:'找不到影片工具',MEDIA_TOOL_FAILED:'影片工具執行失敗',MEDIA_ACCESS_DENIED:'影片存取受限',NETWORK_ERROR:'網絡錯誤',TIMEOUT:'連線逾時',FILE_IO_ERROR:'檔案讀寫失敗',EMPTY_MEDIA:'影片檔案為空',DOWNLOAD_FAILED:'下載失敗'};
     for(const value of values.slice(0,50)) {
       const row=document.createElement('li'),identity=document.createElement('code'),label=document.createElement('span'),code=document.createElement('code');
       identity.textContent=value.itemId;label.textContent=` · ${stages[value.stage] || '下載工作'} · ${codes[value.code] || '下載失敗'} · `;code.textContent=value.code;

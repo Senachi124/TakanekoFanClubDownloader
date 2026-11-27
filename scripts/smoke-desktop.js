@@ -41,6 +41,11 @@ app.whenReady().then(async()=>{
     await until('document.querySelector(".youtube-settings [data-status]").textContent.includes("已儲存")');
     assert.equal(await execute('document.getElementById("youtubeCookiesPaste").value'),'');
     assert.deepEqual(await execute("window.takaneko.invoke('youtube-cookies')"),{configured:true});
+    await execute('document.querySelector("[data-language=en]").click()');
+    await until('document.getElementById("clearCookies").textContent === "Clear sign-in cookies"');
+    await execute('document.getElementById("clearCookies").click()');
+    await until('document.getElementById("notice").textContent.includes("Sign-in cookies and saved credentials cleared")');
+    assert.deepEqual(await execute("window.takaneko.invoke('youtube-cookies')"),{configured:true});
     await execute('document.querySelector("[data-language=ja]").click()');await new Promise(r=>setTimeout(r,100));
     assert.ok((await execute('document.querySelector(".youtube-settings").textContent')).includes('動画へのアクセスは未確認'));
     await capture('youtube-settings-ja.png');

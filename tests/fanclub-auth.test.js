@@ -4,7 +4,7 @@ const {
   parseJwtExp,
   isTokenExpired,
   hasUsableCredentials,
-  ensureFreshToken
+  ensureFreshToken, replaceCredentials
 } = require('../src/main/utils/fanclubAuth');
 const { run } = require('../src/main/api/archiveEngine');
 
@@ -18,8 +18,9 @@ function makeStore(initial = {}) {
   const data = new Map(Object.entries(initial));
   return {
     get: (k, fallback) => (data.has(k) ? data.get(k) : fallback),
-    set: (k, v) => data.set(k, v),
-    delete: k => data.delete(k),
+    set: fields => { for (const [key, value] of Object.entries(fields)) data.set(key, value); },
+    get store() { return Object.fromEntries(data); },
+    set store(fields) { data.clear(); this.set(fields); },
     has: k => data.has(k)
   };
 }
@@ -102,4 +103,41 @@ test('post listing sends Fanclub Origin/Referer headers and falls back if /count
   } finally {
     global.fetch = previous;
   }
+});
+
+test('refresh completion belongs to the account that started it', async () => {
+  for (const status of [200, 403]) {
+    const store = makeStore({ refreshToken: 'fixture-old' });
+    const response = Promise.withResolvers();
+    const pending = ensureFreshToken(store, { fetchImpl: () => response.promise });
+    replaceCredentials(store, { token: 'fixture-new-access' });
+    response.resolve(Response.json({ accessToken: 'fixture-stale' }, { status }));
+    assert.equal(await pending, null);
+    assert.equal(store.get('token'), 'fixture-new-access');
+    assert.equal(store.get('refreshToken'), null);
+  }
+});
+
+test('page two refreshes a rejected access token once and retains the rotated refresh token', async t => {
+  const store = makeStore({ token: 'fixture-old', refreshToken: 'fixture-refresh' });
+  const pages = [];
+  let refreshes = 0;
+  t.mock.method(global, 'fetch', async (url, options) => {
+    const endpoint = new URL(url);
+    if (endpoint.pathname.endsWith('/count')) return Response.json({ count: 51 });
+    if (endpoint.pathname === '/auth/refresh') {
+      refreshes++;
+      return Response.json({ accessToken: 'fixture-new', refreshToken: 'fixture-rotated' });
+    }
+    const offset = Number(endpoint.searchParams.get('offset'));
+    pages.push([offset, options.headers.Authorization]);
+    if (offset && options.headers.Authorization === 'Bearer fixture-old') return new Response(null, { status: 401 });
+    const length = offset ? 1 : 50;
+    return Response.json(Array.from({ length }, (_,i) => ({ notificationReservationId: String(offset+i+1) })));
+  });
+  const items = await run({ action: 'list', getToken: rejectedToken => ensureFreshToken(store, { rejectedToken }) });
+  assert.equal(items.length, 51);
+  assert.deepEqual(pages, [[0,'Bearer fixture-old'],[50,'Bearer fixture-old'],[50,'Bearer fixture-new']]);
+  assert.equal(refreshes, 1);
+  assert.equal(store.get('refreshToken'), 'fixture-rotated');
 });

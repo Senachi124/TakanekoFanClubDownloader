@@ -146,3 +146,25 @@ test('engine and legacy notification helpers use the resource layer without chan
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test('listing continues beyond 50,000 and propagates count service errors', async t => {
+  const total = 50_001;
+  const counts = t.mock.method(global, 'fetch', async raw => {
+    const url = new URL(raw);
+    if (url.pathname.endsWith('/count')) return Response.json({ count: total });
+    const offset = Number(url.searchParams.get('offset'));
+    return Response.json(Array.from({ length: Math.min(50, total-offset) }, (_,i) => ({ notificationReservationId: String(offset+i) })));
+  });
+  assert.equal((await notifications.listAll('fixture')).length, total);
+  counts.mock.resetCalls();
+  counts.mock.mockImplementation(async () => new Response(null, { status: 503 }));
+  await assert.rejects(notifications.listAll('fixture'), { status: 503 });
+  assert.equal(counts.mock.callCount(), 1);
+});
+
+test('an unknown total and a repeated full page report a listing error', async t => {
+  const page = Array.from({length:50}, (_,i) => ({ notificationReservationId: String(i) }));
+  t.mock.method(global, 'fetch', async raw => new URL(raw).pathname.endsWith('/count')
+    ? new Response(null, { status: 403 }) : Response.json(page));
+  await assert.rejects(notifications.listAll('fixture'), /Repeated notification page/);
+});

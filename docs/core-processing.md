@@ -4,7 +4,7 @@
 
 ## 1. `downloadJob()`：工作排程與進度
 
-原始碼：[downloadJob.js](../src/main/downloadJob.js)。輸入為 `{token,directory,settings,state,emit,engine=run}`；`engine` 可注入，方便用合成資料測試排程。
+原始碼：[downloadJob.js](../src/main/downloadJob.js)。輸入為 `{token,getToken,directory,settings,state,emit,engine=run}`；`engine` 可注入，方便用合成資料測試排程。
 
 ```mermaid
 flowchart TD
@@ -37,7 +37,7 @@ flowchart TD
     Existing -->|例外| Fatal
 ```
 
-每個 worker 共用遞增的 `cursor`。併發設定由 [normalizeConcurrency](../src/main/utils/concurrency.js) 正規化到 1–100，預設 5，實際 worker 數不超過項目數。
+桌面工作透過 `getToken` 在每個內容請求前確認憑證與暫停／取消狀態。清單期間取消會回傳 `cancelled`，失去登入憑證時回傳 `loginRequired`。每個 worker 共用遞增的 `cursor`。併發設定由 [normalizeConcurrency](../src/main/utils/concurrency.js) 正規化到 1–100，預設 5，實際 worker 數不超過項目數。
 
 `publish()` 使用 JSON 複製進度，避免 callback 看到之後被改寫的同一物件。詳情取得事件只記一次；若 engine 成功但沒有發送事件，結尾補記。若詳情前失敗，details 與 files 都記失敗；若詳情後失敗，只有 files 記失敗。外層例外會以 `list` 階段整理診斷，即使例外實際出現在後續初始化；這是目前 catch 的行為。
 

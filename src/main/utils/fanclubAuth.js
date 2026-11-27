@@ -1,19 +1,6 @@
-const { API_ORIGIN, SITE_ORIGIN } = require('../api/takaneko/config');
+const { refreshCredentials } = require('../api/takaneko/auth');
 
-let inflightRefresh = null;
-
-function fanclubHeaders(token) {
-  const headers = {
-    Origin: SITE_ORIGIN,
-    Referer: `${SITE_ORIGIN}/`,
-    Accept: 'application/json'
-  };
-  if (typeof token === 'string' && token.trim()) {
-    const raw = token.trim();
-    headers.Authorization = raw.startsWith('Bearer ') ? raw : `Bearer ${raw}`;
-  }
-  return headers;
-}
+const pendingRefresh = new WeakMap();
 
 function parseJwtExp(token) {
   if (typeof token !== 'string') return null;
@@ -42,78 +29,46 @@ function hasUsableCredentials(store, nowMs = Date.now()) {
   return typeof token === 'string' && !!token.trim() && !isTokenExpired(token, 30, nowMs);
 }
 
-function defaultFetch() {
-  return globalThis.fetch;
+// Invalidate outstanding refreshes before changing the stored account.
+function replaceCredentials(store, credentials) {
+  pendingRefresh.delete(store);
+  if (credentials) {
+    store.set({ token: credentials.token, refreshToken: credentials.refreshToken || null });
+  } else {
+    const settings = store.store;
+    delete settings.refreshToken;
+    delete settings.token;
+    store.store = settings;
+  }
 }
 
-async function refreshAccessToken(refreshToken, fetchImpl = defaultFetch()) {
-  const clean = typeof refreshToken === 'string' ? refreshToken.trim() : '';
-  if (!clean) {
-    const error = new Error('Missing refresh token');
-    error.code = 'LOGIN_REQUIRED';
-    throw error;
-  }
-  const response = await fetchImpl(`${API_ORIGIN}/auth/refresh`, {
-    method: 'POST',
-    headers: { ...fanclubHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken: clean }),
-    signal: AbortSignal.timeout(30000)
-  });
-  if (!response.ok) {
-    const error = new Error(`Fanclub HTTP ${response.status}`);
-    error.status = response.status;
-    throw error;
-  }
-  const data = await response.json();
-  const accessToken = typeof data?.accessToken === 'string' ? data.accessToken.trim() : '';
-  if (!accessToken) {
-    const error = new Error('Refresh response missing accessToken');
-    error.code = 'LOGIN_REQUIRED';
-    throw error;
-  }
-  return accessToken.startsWith('Bearer ') ? accessToken : `Bearer ${accessToken}`;
-}
-
-async function ensureFreshToken(store, { forceRefresh = false, fetchImpl = defaultFetch(), nowMs = Date.now() } = {}) {
+async function ensureFreshToken(store, { rejectedToken, fetchImpl, nowMs = Date.now() } = {}) {
   const token = store.get('token');
+  if (token && token !== rejectedToken && !isTokenExpired(token, 30, nowMs)) return token;
   const refreshToken = store.get('refreshToken');
-  if (!forceRefresh && typeof token === 'string' && token.trim() && !isTokenExpired(token, 30, nowMs)) {
-    return token;
+  if (typeof refreshToken !== 'string' || !refreshToken.trim()) {
+    if (token) replaceCredentials(store, null);
+    return null;
   }
-  if (typeof refreshToken === 'string' && refreshToken.trim()) {
-    if (!inflightRefresh) {
-      inflightRefresh = refreshAccessToken(refreshToken, fetchImpl)
-        .then(fresh => {
-          store.set('token', fresh);
-          return fresh;
-        })
-        .catch(error => {
-          if (error?.status === 400 || error?.status === 401 || error?.status === 403) {
-            if (typeof store.delete === 'function') {
-              store.delete('token');
-              store.delete('refreshToken');
-            }
-            return null;
-          }
-          throw error;
-        })
-        .finally(() => {
-          inflightRefresh = null;
-        });
-    }
-    return inflightRefresh;
-  }
-  if (typeof token === 'string' && token.trim() && isTokenExpired(token, 30, nowMs)) {
-    if (typeof store.delete === 'function') store.delete('token');
-  }
-  return null;
+
+  const pending = pendingRefresh.get(store);
+  if (pending) return pending;
+  const request = refreshCredentials(refreshToken, fetchImpl)
+    .then(credentials => {
+      if (pendingRefresh.get(store) !== request) return null;
+      replaceCredentials(store, credentials);
+      return credentials.token;
+    }, error => {
+      if (pendingRefresh.get(store) !== request) return null;
+      if (![400, 401, 403].includes(error.status)) throw error;
+      replaceCredentials(store, null);
+      return null;
+    })
+    .finally(() => {
+      if (pendingRefresh.get(store) === request) pendingRefresh.delete(store);
+    });
+  pendingRefresh.set(store, request);
+  return request;
 }
 
-module.exports = {
-  fanclubHeaders,
-  parseJwtExp,
-  isTokenExpired,
-  hasUsableCredentials,
-  refreshAccessToken,
-  ensureFreshToken
-};
+module.exports = { parseJwtExp, isTokenExpired, hasUsableCredentials, ensureFreshToken, replaceCredentials };

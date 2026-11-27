@@ -1,5 +1,5 @@
 // Only allowlisted codes and source identifiers cross IPC or enter job history.
-const CODES = new Set(['MOVIE_TYPE_UNSUPPORTED','VIDEO_ID_INVALID','VIDEO_ID_MISSING','HTTPS_REQUIRED','MEDIA_TOOL_NOT_FOUND','MEDIA_TOOL_FAILED','MEDIA_ACCESS_DENIED','NETWORK_ERROR','TIMEOUT','FILE_IO_ERROR','EMPTY_MEDIA','DOWNLOAD_FAILED']);
+const CODES = new Set(['LOGIN_REQUIRED','MOVIE_TYPE_UNSUPPORTED','VIDEO_ID_INVALID','VIDEO_ID_MISSING','HTTPS_REQUIRED','MEDIA_TOOL_NOT_FOUND','MEDIA_TOOL_FAILED','MEDIA_ACCESS_DENIED','NETWORK_ERROR','TIMEOUT','FILE_IO_ERROR','EMPTY_MEDIA','DOWNLOAD_FAILED']);
 const STAGES = new Set(['list','details','cover','video','save','download']);
 function failure(code, message=code) { const error=new Error(message);error.code=code;return error; }
 function diagnostic(error, item={}, stage='download') {

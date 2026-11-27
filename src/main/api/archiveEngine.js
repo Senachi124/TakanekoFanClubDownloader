@@ -5,6 +5,7 @@ const { processSinglePost } = require('./exportPosts');
 const { handleBackupTopicsBlogs } = require('./exportBlogs');
 const { handleBackupGallery } = require('./exportGallery');
 const { handleBackupMovies } = require('./exportMovies');
+const { waitForDownload } = require('../utils/concurrency');
 const { diagnostic } = require('../utils/downloadErrors');
 
 async function listStep(kind, fn) {
@@ -20,15 +21,21 @@ async function listStep(kind, fn) {
 }
 
 async function run(input, state = {}, onEvent = () => {}) {
+  async function requestToken(rejectedToken) {
+    if (!await waitForDownload(state)) throw new Error('Cancelled by user');
+    const token = input.getToken ? await input.getToken(rejectedToken) : input.token;
+    if (!await waitForDownload(state)) throw new Error('Cancelled by user');
+    return token;
+  }
   if (input.action === 'list') {
-    const posts = await listStep('post', () => notifications.listAll(input.token));
+    const posts = await listStep('post', () => notifications.listAll(requestToken));
     const items = posts.filter(p => p.notificationReservationId).map(p => ({
       kind: 'post', id: String(p.notificationReservationId), title: p.title || p.subject || ''
     }));
     if (input.blogs) {
       await listStep('blog', async () => {
         for (let page = 1, pages = 1; page <= pages; page++) {
-          const r = await blogs.list(input.token, page);
+          const r = await blogs.list(requestToken, page);
           if (!Array.isArray(r.articleList)) throw new Error('Invalid blog list');
           pages = r.totalPages || 1;
           items.push(...r.articleList.map(p => ({ kind: 'blog', id: String(p.id), title: p.title || '' })));
@@ -40,7 +47,7 @@ async function run(input, state = {}, onEvent = () => {}) {
       const source = kind === 'gallery' ? gallery : movies;
       await listStep(kind, async () => {
         for (let page=1,pages=1; page<=pages; page++) {
-          const result=await source.list(input.token, page);
+          const result=await source.list(requestToken, page);
           if (!Array.isArray(result[listName])) throw new Error(`Invalid ${kind} list`);
           pages=result.totalPages || 1;
           items.push(...result[listName].map(item=>({kind,id:String(item.id),title:item.title || ''})));
@@ -55,11 +62,11 @@ async function run(input, state = {}, onEvent = () => {}) {
   state = Object.assign(Object.create(state), {onDetails: () => onEvent({stage:'details'})});
   if (item.kind === 'gallery' || item.kind === 'movie') {
     const exporter = item.kind === 'gallery' ? handleBackupGallery : handleBackupMovies;
-    completedFolder = await exporter(input.token,input.directory,state,null,item);
+    completedFolder = await exporter(requestToken,input.directory,state,null,item);
   } else if (item.kind === 'blog') {
-    completedFolder = await handleBackupTopicsBlogs(input.token, input.directory, state, null, item);
+    completedFolder = await handleBackupTopicsBlogs(requestToken, input.directory, state, null, item);
   } else {
-    const data = await notifications.detail(input.token, item.id);
+    const data = await notifications.detail(requestToken, item.id);
     state.onDetails();
     completedFolder = await processSinglePost({ ...data, notificationReservationId: item.id }, input.directory, true);
   }
