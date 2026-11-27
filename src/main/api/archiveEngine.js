@@ -5,30 +5,47 @@ const { processSinglePost } = require('./exportPosts');
 const { handleBackupTopicsBlogs } = require('./exportBlogs');
 const { handleBackupGallery } = require('./exportGallery');
 const { handleBackupMovies } = require('./exportMovies');
+const { diagnostic } = require('../utils/downloadErrors');
+
+async function listStep(kind, fn) {
+  try {
+    return await fn();
+  } catch (error) {
+    const wrapped = error instanceof Error ? error : new Error(String(error));
+    if (!Array.isArray(wrapped.diagnostics) || !wrapped.diagnostics.length) {
+      wrapped.diagnostics = [diagnostic(wrapped, { id: `list-${kind}`, kind }, 'list')];
+    }
+    throw wrapped;
+  }
+}
 
 async function run(input, state = {}, onEvent = () => {}) {
   if (input.action === 'list') {
-    const posts = await notifications.listAll(input.token);
+    const posts = await listStep('post', () => notifications.listAll(input.token));
     const items = posts.filter(p => p.notificationReservationId).map(p => ({
       kind: 'post', id: String(p.notificationReservationId), title: p.title || p.subject || ''
     }));
     if (input.blogs) {
-      for (let page = 1, pages = 1; page <= pages; page++) {
-        const r = await blogs.list(input.token, page);
-        if (!Array.isArray(r.articleList)) throw new Error('Invalid blog list');
-        pages = r.totalPages || 1;
-        items.push(...r.articleList.map(p => ({ kind: 'blog', id: String(p.id), title: p.title || '' })));
-      }
+      await listStep('blog', async () => {
+        for (let page = 1, pages = 1; page <= pages; page++) {
+          const r = await blogs.list(input.token, page);
+          if (!Array.isArray(r.articleList)) throw new Error('Invalid blog list');
+          pages = r.totalPages || 1;
+          items.push(...r.articleList.map(p => ({ kind: 'blog', id: String(p.id), title: p.title || '' })));
+        }
+      });
     }
     for (const [enabled,kind,listName] of [[input.gallery,'gallery','galleryAlbumList'],[input.movies,'movie','movieList']]) {
       if (!enabled) continue;
       const source = kind === 'gallery' ? gallery : movies;
-      for (let page=1,pages=1; page<=pages; page++) {
-        const result=await source.list(input.token, page);
-        if (!Array.isArray(result[listName])) throw new Error(`Invalid ${kind} list`);
-        pages=result.totalPages || 1;
-        items.push(...result[listName].map(item=>({kind,id:String(item.id),title:item.title || ''})));
-      }
+      await listStep(kind, async () => {
+        for (let page=1,pages=1; page<=pages; page++) {
+          const result=await source.list(input.token, page);
+          if (!Array.isArray(result[listName])) throw new Error(`Invalid ${kind} list`);
+          pages=result.totalPages || 1;
+          items.push(...result[listName].map(item=>({kind,id:String(item.id),title:item.title || ''})));
+        }
+      });
     }
     return items;
   }

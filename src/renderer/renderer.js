@@ -15,7 +15,7 @@ function indexingState(delta){indexing+=delta;const active=indexing>0;$('scanPro
 const readerMode=()=>'reader';
 function notice(text){$('notice').hidden=!text;$('notice').textContent=text;}
 async function loginStatus(){const yes=await api('get-login-status');$('loginStatus').textContent=yes?'已登入':'尚未登入';$('start').disabled=running||!yes;}
-function busy(active){running=active;$('start').disabled=active;$('pause').disabled=$('stop').disabled=!active;}
+function busy(active){running=active;$('start').disabled=active;$('pause').disabled=$('stop').disabled=!active;$('clearCookies').disabled=active;}
 async function save(){const value={concurrency:Number($('concurrency').value),blogs:$('blogs').checked,gallery:$('gallery').checked,movies:$('movies').checked};const saved=await api('save-v2-settings',value);$('concurrency').value=saved.concurrency;}
 async function load(scan=false){
   const request=++serial,mode=readerMode();indexingState(1);
@@ -81,7 +81,7 @@ async function folderSettings(){const settings=await api('get-folder-settings');
 $('chooseDownload').onclick=async()=>{try{const result=await api('download-folder-select');await folderSettings();notice(result.error?actionMessage(result):result.cancelled?'':'設定已儲存');}catch{notice('無法讀取資料夾');}};
 $('savePost').onclick=()=>archiveAction('save-post',detailKey,$('savePost'));
 $('revealPost').onclick=()=>archiveAction('reveal-post',detailKey,$('revealPost'));
-$('login').onclick=()=>api('open-login');$('capture').onclick=async()=>{$('capture').disabled=true;notice('處理中');try{const result=await api('capture-token');notice(result.success?'已登入':'需要重新登入或重試');await loginStatus();}finally{$('capture').disabled=false;}};
+$('login').onclick=()=>api('open-login');$('capture').onclick=async()=>{$('capture').disabled=true;notice('處理中');try{const result=await api('capture-token');notice(result.success?'已登入':'需要重新登入或重試');await loginStatus();}finally{$('capture').disabled=false;}};$('clearCookies').onclick=async()=>{$('clearCookies').disabled=true;notice('處理中');try{const result=await api('clear-login-cookies');notice(result?.success?'已清除登入 Cookies 同已儲存嘅登入資料。請再開登入視窗，重新登入。':'未能清除登入 Cookies，請再試一次。');await loginStatus();}catch{notice('未能清除登入 Cookies，請再試一次。');}finally{$('clearCookies').disabled=running;}};
 $('settingsForm').onsubmit=async event=>{event.preventDefault();await save();notice('設定已儲存');};
 $('start').onclick=async()=>{await save();busy(true);paused=false;$('pause').textContent='暫停';notice('處理中');try{const result=await api('start-download');notice(result.status==='completed'?'已完成':result.status==='cancelled'?'已停止':'下載失敗');}finally{busy(false);await loginStatus();}};
 $('pause').onclick=async()=>{paused=!paused;await api(paused?'control-pause':'control-resume');$('pause').textContent=paused?'繼續':'暫停';};$('stop').onclick=()=>api('control-cancel');$('folder').onclick=()=>api('open-exported-folder');

@@ -6,6 +6,7 @@ const {ArchiveReader} = require('./local-reader');
 const {downloadJob} = require('./downloadJob');
 const {normalizeConcurrency} = require('./utils/concurrency');
 const {saveMedia,savePost}=require('./archiveActions');
+const {hasUsableCredentials,isTokenExpired,ensureFreshToken}=require('./utils/fanclubAuth');
 function setup({store,state,getWindow}) {
   const readers = {local:new ArchiveReader(),reader:new ArchiveReader()};
   const ready = {};
@@ -16,7 +17,7 @@ function setup({store,state,getWindow}) {
     if(!ready[mode]) ready[mode]=readers[mode].select(mode==='reader'?(store.get('readerRoot') || exported()):exported());
     await ready[mode]; return readers[mode];
   }
-  ipcMain.handle('get-login-status',()=>!!store.get('token'));
+  ipcMain.handle('get-login-status',()=>hasUsableCredentials(store));
   ipcMain.handle('youtube-cookies',(_event,value)=>{
     const cookies=require('./utils/youtubeCookies');
     if(!value) return cookies.status();
@@ -83,11 +84,16 @@ function setup({store,state,getWindow}) {
   ipcMain.handle('reader-detail',async(_e,mode,key)=>(await getReader(mode)).detail(key));
   ipcMain.handle('start-download',async()=>{
     if(running) return {success:false,status:'busy'};
-    const token=store.get('token');if(!token) return {success:false,status:'loginRequired'};
+    if(!hasUsableCredentials(store)) return {success:false,status:'loginRequired'};
+    const storedToken=store.get('token');
+    const token=(typeof storedToken==='string' && storedToken.trim() && !isTokenExpired(storedToken))
+      ? storedToken
+      : await ensureFreshToken(store);
+    if(!token) return {success:false,status:'loginRequired'};
     running=true;state.isPaused=false;state.isCancelled=false;let errorsSaved=-1;
     try {
       const directory=exported();
-      const result=await downloadJob({token,directory,settings:{blogs:true,gallery:true,movies:true,...store.get('v2Settings',{}),concurrency:store.get('downloadConcurrency',5)},state,emit:p=>{
+      const result=await downloadJob({token,getToken:()=>ensureFreshToken(store),directory,settings:{blogs:true,gallery:true,movies:true,...store.get('v2Settings',{}),concurrency:store.get('downloadConcurrency',5)},state,emit:p=>{
         if(errorsSaved!==(p.errors || []).length){store.set('downloadErrors',p.errors || []);errorsSaved=(p.errors || []).length;}
         if(!getWindow().isDestroyed())getWindow().webContents.send('job-progress',p);
       }});

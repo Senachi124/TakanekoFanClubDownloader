@@ -1,5 +1,5 @@
 const net = require('../../utils/network');
-const { API_ORIGIN } = require('./config');
+const { API_ORIGIN, SITE_ORIGIN } = require('./config');
 
 // Fanclub JSON only. Images and third-party videos use their own download paths.
 async function getJson(endpoint, token, { timeoutMs = 30_000, headers = {} } = {}) {
@@ -15,7 +15,13 @@ async function getJson(endpoint, token, { timeoutMs = 30_000, headers = {} } = {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await net.fetch(url.href, {
-      headers: { Accept: 'application/json, text/plain, */*', ...headers, Authorization: authorization },
+      headers: {
+        Origin: SITE_ORIGIN,
+        Referer: `${SITE_ORIGIN}/`,
+        Accept: 'application/json, text/plain, */*',
+        ...headers,
+        Authorization: authorization
+      },
       signal: controller.signal
     });
     if (response.status !== 200) {

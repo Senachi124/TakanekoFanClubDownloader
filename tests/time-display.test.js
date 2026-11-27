@@ -25,6 +25,12 @@ test('publication timestamps use labeled JST in both languages regardless of the
           assert.equal(ui.publicationTime(missing),`${label}（JST / UTC+9）：${language==='ja'?'日付不明':'未知日期'}`);
         }
       }
+      const enUi=await loadUI('en');
+      assert.equal(enUi.publicationTime('2024-01-01T15:00:00.000Z'),'Published (JST / UTC+9): 2024-01-02 00:00:00');
+      assert.equal(enUi.t('清除登入 Cookies'),'Clear sign-in cookies');
+      for(const missing of [null,undefined,'','invalid-date']) {
+        assert.equal(enUi.publicationTime(missing),'Published (JST / UTC+9): Unknown date');
+      }
     }
   } finally {if(previous===undefined)delete process.env.TZ;else process.env.TZ=previous;}
 });

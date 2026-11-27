@@ -3,13 +3,15 @@ const {normalizeConcurrency} = require('./utils/concurrency');
 const {ArchiveReader} = require('./local-reader');
 const {diagnostics} = require('./utils/downloadErrors');
 function initialProgress() { return {list:{done:0,total:null,failed:0,skipped:0,state:'running'},details:{done:0,total:null,failed:0,skipped:0,state:'waiting'},files:{done:0,total:null,failed:0,skipped:0,state:'waiting'}}; }
-async function downloadJob({token,directory,settings,state,emit,engine=run}) {
+async function downloadJob({token,getToken,directory,settings,state,emit,engine=run}) {
   const progress = initialProgress();
   progress.errors=[];
   const publish = () => emit(JSON.parse(JSON.stringify(progress)));
+  const resolveToken = async () => (typeof getToken === 'function' ? await getToken() : token);
   publish();
   try {
-    const items = [...new Map((await engine({action:'list',token,...settings},state)).map(i=>[`${i.kind}:${i.id}`,i])).values()];
+    const listToken = await resolveToken();
+    const items = [...new Map((await engine({action:'list',token:listToken,...settings},state)).map(i=>[`${i.kind}:${i.id}`,i])).values()];
     progress.list={done:items.length,total:items.length,failed:0,skipped:0,state:'completed'};
     progress.details.total=progress.files.total=items.length;
     progress.details.state=progress.files.state='running'; publish();
@@ -25,7 +27,8 @@ async function downloadJob({token,directory,settings,state,emit,engine=run}) {
         }
         let detailed=false;
         try {
-          await engine({action:'download',token,item,directory},state,event=>{
+          const itemToken = await resolveToken();
+          await engine({action:'download',token:itemToken,item,directory},state,event=>{
             if(event.stage==='details' && !detailed) {detailed=true;progress.details.done++;publish();}
           });
           if(!detailed) progress.details.done++;

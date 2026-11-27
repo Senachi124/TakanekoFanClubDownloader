@@ -2,7 +2,8 @@ const { app, BrowserWindow, ipcMain, shell, dialog, session, protocol } = requir
 const path = require('path');
 const Store = require('electron-store');
 const packageInfo = require('../../package.json');
-const { API_REQUEST_PATTERN } = require('./api/takaneko/config');
+const { API_ORIGIN, SITE_ORIGIN, API_REQUEST_PATTERN } = require('./api/takaneko/config');
+const { refreshAccessToken } = require('./utils/fanclubAuth');
 
 protocol.registerSchemesAsPrivileged([{scheme:'archive',privileges:{standard:true,secure:true,supportFetchAPI:true,stream:true}}]);
 const store = new Store();
@@ -32,7 +33,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js')
     },
     titleBarStyle: 'hiddenInset',
-    backgroundColor: '#1a1a2e'
+    backgroundColor: '#1E1E2E'
   });
 
   mainWindow.setTitle(`${APP_NAME} v${packageInfo.version}`);
@@ -106,7 +107,7 @@ ipcMain.handle('open-login', async () => {
     title: `Login to ${APP_NAME}`
   });
 
-  loginWindow.loadURL('https://takanekofc.com/#/login');
+  loginWindow.loadURL(`${SITE_ORIGIN}/login`);
 
   loginWindow.on('closed', () => {
     loginWindow = null;
@@ -115,10 +116,76 @@ ipcMain.handle('open-login', async () => {
   return { success: true };
 });
 
+const LOGIN_ORIGINS = [SITE_ORIGIN, API_ORIGIN];
+
+function cookieMatchesLogin(cookie) {
+  const domain = String(cookie.domain || '').replace(/^\./, '').toLowerCase();
+  return domain === 'takanekofc.com' || domain.endsWith('.takanekofc.com');
+}
+
+function cookieUrl(cookie) {
+  const host = String(cookie.domain || '').replace(/^\./, '');
+  const protocol = cookie.secure ? 'https:' : 'http:';
+  return `${protocol}//${host}${cookie.path || '/'}`;
+}
+
+// Drop the embedded Fanclub session and the saved API tokens without touching YouTube cookies.
+ipcMain.handle('clear-login-cookies', async () => {
+  const browserSession = loginWindow && !loginWindow.isDestroyed()
+    ? loginWindow.webContents.session
+    : session.defaultSession;
+  const cookies = await browserSession.cookies.get({});
+  let removed = 0;
+  for (const cookie of cookies) {
+    if (!cookieMatchesLogin(cookie)) continue;
+    await browserSession.cookies.remove(cookieUrl(cookie), cookie.name);
+    removed += 1;
+  }
+  for (const origin of LOGIN_ORIGINS) {
+    await browserSession.clearStorageData({
+      origin,
+      storages: ['cookies', 'localstorage', 'indexdb', 'serviceworkers', 'cachestorage']
+    });
+  }
+  store.delete('token');
+  store.delete('refreshToken');
+  if (loginWindow && !loginWindow.isDestroyed()) {
+    loginWindow.loadURL(`${SITE_ORIGIN}/login`);
+  }
+  return { success: true, removed };
+});
+
+async function readRefreshTokenFromWindow(win) {
+  if (!win || win.isDestroyed()) return '';
+  try {
+    const value = await win.webContents.executeJavaScript(
+      "(function(){try{return window.localStorage.getItem('refreshToken')||window.sessionStorage.getItem('refreshToken')||'';}catch(e){return '';}})()"
+    );
+    return typeof value === 'string' ? value.trim() : '';
+  } catch {
+    return '';
+  }
+}
+
 // Capture token from logged-in session
 ipcMain.handle('capture-token', async () => {
   if (!loginWindow || loginWindow.isDestroyed()) {
     return { success: false, error: 'Login window not found.' };
+  }
+
+  // Read refreshToken before reload because the Fanclub site clears localStorage on unload when keep-session is off.
+  const initialRefresh = await readRefreshTokenFromWindow(loginWindow);
+  if (initialRefresh) {
+    try {
+      const freshToken = await refreshAccessToken(initialRefresh);
+      store.set('refreshToken', initialRefresh);
+      store.set('token', freshToken);
+      console.log('✅ Refresh + access token captured successfully!');
+      if (loginWindow && !loginWindow.isDestroyed()) loginWindow.close();
+      return { success: true };
+    } catch (error) {
+      console.warn('⚠️ Direct refresh from stored refreshToken failed, falling back to reload capture:', error.message);
+    }
   }
 
   return new Promise((resolve) => {
